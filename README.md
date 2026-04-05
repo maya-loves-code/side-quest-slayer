@@ -43,3 +43,5 @@ Open in the Expo Go app or run on an iOS/Android simulator.
 - Keep `package.json` marked `"private": true` to avoid accidental npm publishing.
 - Do not commit local artifacts such as `node_modules/`, `.expo/`, `.DS_Store`, or `.env` files.
 - If any secret was ever pasted into this project in the past, rotate it before making the GitHub repo public.
+
+Last verified GitHub push flow from local machine: April 5, 2026.
