@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "Side Quest Slayer",
+    "slug": "side-quest-slayer",
+    "scheme": "sidequestslayer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Side Quest Slayer uses your camera to capture daily proof of your progress."
+        }
+      ],
+      "expo-sqlite"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sidequestslayer.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Side Quest Slayer uses your camera to capture daily proof of your progress."
+      }
+    },
+    "android": {
+      "package": "com.sidequestslayer.app",
+      "permissions": [
+        "CAMERA",
+        "POST_NOTIFICATIONS"
+      ]
+    }
+  }
+}
