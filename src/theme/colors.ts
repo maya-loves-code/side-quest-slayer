@@ -1,0 +1,22 @@
+// Brand colors for Side Quest Slayer. Do not change these during layout-only UI polish.
+export const palette = {
+  paper: "#fff9f0",
+  ink: "#1f1a17",
+  accent: "#7c3aed",
+  accentDark: "#5b21b6",
+  accentSoft: "#ede3ff",
+  blush: "#ffd9cb",
+  gold: "#ffc857",
+  sky: "#b8f2e6",
+  card: "#fff4e2",
+  panel: "#fff7ee",
+  border: "#d8bca6",
+  muted: "#6f5d54",
+  danger: "#9f2f25",
+  dangerSoft: "#ffe9e6",
+  dangerBorder: "#f4a093",
+  backdrop: "rgba(30, 18, 12, 0.5)",
+  dark: "#140b10",
+  shadow: "rgba(103, 49, 30, 0.14)",
+  shadowStrong: "rgba(103, 49, 30, 0.18)",
+};

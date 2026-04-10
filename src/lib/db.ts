@@ -21,6 +21,7 @@ export async function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS quests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
+      emoji TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       started_at TEXT NOT NULL,
       completed_at TEXT
@@ -35,12 +36,20 @@ export async function initializeDatabase() {
       FOREIGN KEY (quest_id) REFERENCES quests (id) ON DELETE CASCADE
     );
   `);
+
+  const questColumns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(quests)`);
+  const hasEmojiColumn = questColumns.some((column) => column.name === "emoji");
+
+  if (!hasEmojiColumn) {
+    await db.execAsync(`ALTER TABLE quests ADD COLUMN emoji TEXT;`);
+  }
 }
 
 function mapQuest(row: any): Quest {
   return {
     id: row.id,
     title: row.title,
+    emoji: row.emoji ?? null,
     status: row.status,
     startedAt: row.started_at,
     completedAt: row.completed_at ?? null,
@@ -75,18 +84,25 @@ export async function getArchivedQuests() {
   return rows.map(mapQuest);
 }
 
-export async function createQuest(title: string) {
+export async function createQuest(title: string, emoji: string | null = null) {
   const db = await getDatabase();
   const startedAt = new Date().toISOString();
 
   await db.withExclusiveTransactionAsync(async () => {
     await db.runAsync(`UPDATE quests SET status = 'archived', completed_at = ? WHERE status = 'active'`, startedAt);
     await db.runAsync(
-      `INSERT INTO quests (title, status, started_at) VALUES (?, 'active', ?)`,
+      `INSERT INTO quests (title, emoji, status, started_at) VALUES (?, ?, 'active', ?)`,
       title.trim(),
+      emoji,
       startedAt
     );
   });
+}
+
+export async function updateQuestEmoji(questId: number, emoji: string) {
+  const db = await getDatabase();
+
+  await db.runAsync(`UPDATE quests SET emoji = ? WHERE id = ?`, emoji, questId);
 }
 
 export async function completeQuest(questId: number) {
@@ -111,6 +127,12 @@ export async function addEntry(questId: number, imageUri: string, isMilestone = 
     timestamp,
     isMilestone
   );
+}
+
+export async function deleteEntry(entryId: number) {
+  const db = await getDatabase();
+
+  await db.runAsync(`DELETE FROM entries WHERE id = ?`, entryId);
 }
 
 export async function getEntriesForQuest(questId: number) {

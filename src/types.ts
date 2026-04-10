@@ -3,6 +3,7 @@ export type QuestStatus = "active" | "archived";
 export type Quest = {
   id: number;
   title: string;
+  emoji: string | null;
   status: QuestStatus;
   startedAt: string;
   completedAt: string | null;

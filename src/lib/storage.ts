@@ -23,3 +23,15 @@ export async function saveCapturedPhoto(tempUri: string) {
 
   return destination;
 }
+
+export async function deleteStoredPhoto(uri: string) {
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+
+    if (info.exists) {
+      await FileSystem.deleteAsync(uri, { idempotent: true });
+    }
+  } catch (error) {
+    console.warn("Could not delete stored photo", error);
+  }
+}
