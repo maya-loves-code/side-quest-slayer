@@ -16,13 +16,20 @@
           "cameraPermission": "Side Quest Slayer uses your camera to capture daily proof of your progress."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll."
+        }
+      ],
       "expo-sqlite"
     ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sidequestslayer.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Side Quest Slayer uses your camera to capture daily proof of your progress."
+        "NSCameraUsageDescription": "Side Quest Slayer uses your camera to capture daily proof of your progress.",
+        "NSPhotoLibraryUsageDescription": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll."
       }
     },
     "android": {

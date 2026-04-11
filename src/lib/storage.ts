@@ -24,6 +24,21 @@ export async function saveCapturedPhoto(tempUri: string) {
   return destination;
 }
 
+export async function saveImportedPhoto(sourceUri: string) {
+  await ensurePhotoDirectory();
+
+  const extensionMatch = sourceUri.match(/\.(jpe?g|png|heic|webp)(?:\?|#|$)/i);
+  const extension = extensionMatch?.[1]?.toLowerCase() ?? "jpg";
+  const destination = `${QUEST_PHOTO_DIR}/import-${Date.now()}.${extension}`;
+
+  await FileSystem.copyAsync({
+    from: sourceUri,
+    to: destination,
+  });
+
+  return destination;
+}
+
 export async function deleteStoredPhoto(uri: string) {
   try {
     const info = await FileSystem.getInfoAsync(uri);

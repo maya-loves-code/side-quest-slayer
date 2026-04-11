@@ -6,6 +6,7 @@ Bare-bones V1 of a private, local-first progress journal for one active goal at 
 
 - Singular quest onboarding
 - Full-screen daily proof camera
+- Camera roll photo uploads from the capture flow
 - Local photo persistence to the device file system
 - Local SQLite storage for quests and entries
 - Scrapbook-style 2-3 column moment grid
@@ -18,6 +19,7 @@ Bare-bones V1 of a private, local-first progress journal for one active goal at 
 - Expo
 - React Native
 - `expo-camera`
+- `expo-image-picker`
 - `expo-sqlite`
 - `expo-file-system`
 - `expo-notifications`

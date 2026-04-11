@@ -1,9 +1,13 @@
 import { CameraView, useCameraPermissions } from "expo-camera";
+import type { CameraType } from "expo-camera";
+import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Easing,
   Image,
   Modal,
   Pressable,
@@ -29,7 +33,7 @@ import {
   updateQuestEmoji,
 } from "./src/lib/db";
 import { scheduleDailyQuestReminder } from "./src/lib/notifications";
-import { deleteStoredPhoto, saveCapturedPhoto } from "./src/lib/storage";
+import { deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
 import type { JournalEntry, Quest } from "./src/types";
 
@@ -41,9 +45,19 @@ type JourneyState = {
 };
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️"];
+const TILE_SPARKLES = [
+  { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
+  { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.gold },
+  { id: "top-right", left: 92, top: 52, x: 42, y: -34, scale: 1, rotate: "24deg", color: palette.accentSoft },
+  { id: "left", left: 52, top: 76, x: -52, y: 4, scale: 0.82, rotate: "45deg", color: palette.gold },
+  { id: "right", left: 96, top: 76, x: 54, y: 2, scale: 0.88, rotate: "-28deg", color: palette.accent },
+  { id: "bottom-left", left: 64, top: 98, x: -30, y: 36, scale: 0.72, rotate: "8deg", color: palette.accentSoft },
+  { id: "bottom-right", left: 88, top: 98, x: 30, y: 34, scale: 0.76, rotate: "-18deg", color: palette.gold },
+];
 
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
+  const scrollViewRef = useRef<ScrollView | null>(null);
   const { width } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(true);
@@ -53,14 +67,20 @@ export default function App() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [archivedQuests, setArchivedQuests] = useState<Quest[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [savingPhoto, setSavingPhoto] = useState(false);
+  const [importingPhoto, setImportingPhoto] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
   const [momentMenuOpen, setMomentMenuOpen] = useState(false);
+  const [highlightedMomentId, setHighlightedMomentId] = useState<number | null>(null);
+  const [celebrationKey, setCelebrationKey] = useState(0);
+  const [scrapbookY, setScrapbookY] = useState(0);
   const [journeyPair, setJourneyPair] = useState<JourneyState>({ first: null, latest: null });
 
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
   const momentColumns = useMemo(() => createMomentColumns(entries, width >= 720 ? 3 : 2), [entries, width]);
+  const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
     void bootstrapApp();
@@ -88,7 +108,7 @@ export default function App() {
     if (!quest) {
       setEntries([]);
       setJourneyPair({ first: null, latest: null });
-      return;
+      return [];
     }
 
     const [questEntries, pair] = await Promise.all([
@@ -98,6 +118,7 @@ export default function App() {
 
     setEntries(questEntries);
     setJourneyPair(pair);
+    return questEntries;
   }
 
   async function handleCreateQuest() {
@@ -112,7 +133,7 @@ export default function App() {
   }
 
   async function handleCapturePhoto() {
-    if (!cameraRef.current || !activeQuest || savingPhoto) {
+    if (!cameraRef.current || !activeQuest || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -126,13 +147,74 @@ export default function App() {
 
       const savedUri = await saveCapturedPhoto(photo.uri);
       await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0);
-      setCameraOpen(false);
-      await refreshData();
+      await finishMomentAdded();
     } catch (error) {
       console.error(error);
       Alert.alert("Camera error", "That photo did not save. Try one more time.");
     } finally {
       setSavingPhoto(false);
+    }
+  }
+
+  async function handleImportPhoto() {
+    if (!activeQuest || savingPhoto || importingPhoto) {
+      return;
+    }
+
+    try {
+      setImportingPhoto(true);
+
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        Alert.alert("Camera roll needed", "Allow photo library access to upload a moment from your camera roll.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: false,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+        selectionLimit: 1,
+      });
+
+      if (result.canceled || !result.assets[0]?.uri) {
+        return;
+      }
+
+      const savedUri = await saveImportedPhoto(result.assets[0].uri);
+      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0);
+      await finishMomentAdded();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Upload error", "That photo did not save. Try one more time.");
+    } finally {
+      setImportingPhoto(false);
+    }
+  }
+
+  function flipCamera() {
+    if (savingPhoto || importingPhoto) {
+      return;
+    }
+
+    setCameraFacing((facing) => (facing === "back" ? "front" : "back"));
+  }
+
+  async function finishMomentAdded() {
+    setCameraOpen(false);
+    const questEntries = await refreshData();
+    const newestMoment = questEntries[0];
+
+    if (newestMoment) {
+      setHighlightedMomentId(null);
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: Math.max(scrapbookY - 12, 0), animated: true });
+      }, 150);
+      setTimeout(() => {
+        setHighlightedMomentId(newestMoment.id);
+        setCelebrationKey((key) => key + 1);
+      }, 650);
     }
   }
 
@@ -168,6 +250,7 @@ export default function App() {
       }
     }
 
+    setCameraFacing("back");
     setCameraOpen(true);
   }
 
@@ -209,20 +292,56 @@ export default function App() {
       <StatusBar style="dark" />
       <Modal animationType="slide" visible={cameraOpen}>
         <View style={styles.cameraScreen}>
-          <CameraView ref={cameraRef} facing="back" style={StyleSheet.absoluteFill} />
+          <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
           <View style={styles.cameraOverlay}>
-            <Text style={styles.cameraQuestTitle}>
-              {activeEmoji} {activeQuest?.title}
-            </Text>
+            <View style={styles.cameraHeader}>
+              <Text style={styles.cameraQuestTitle}>
+                {activeEmoji} {activeQuest?.title}
+              </Text>
+              <Pressable
+                onPress={() => setCameraOpen(false)}
+                style={styles.cameraCloseButton}
+                accessibilityLabel="Close camera"
+              >
+                <Text style={styles.cameraCloseText}>×</Text>
+              </Pressable>
+            </View>
             <View style={styles.cameraActions}>
-              <Pressable onPress={() => setCameraOpen(false)} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Close</Text>
-              </Pressable>
-              <Pressable onPress={handleCapturePhoto} style={styles.captureButton}>
-                <Text style={styles.captureButtonText}>
-                  {savingPhoto ? "Saving..." : "Take Daily Proof"}
-                </Text>
-              </Pressable>
+              <View style={styles.cameraControlBar}>
+                <Pressable
+                  onPress={handleImportPhoto}
+                  style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
+                  accessibilityLabel="Upload photo from camera roll"
+                  disabled={savingPhoto || importingPhoto}
+                >
+                  <Text style={styles.cameraSideIcon}>🖼️</Text>
+                </Pressable>
+
+                <Pressable
+                  disabled={savingPhoto || importingPhoto}
+                  onPress={handleCapturePhoto}
+                  style={savingPhoto || importingPhoto ? styles.shutterButtonDisabled : styles.shutterButton}
+                  accessibilityLabel="Take photo"
+                >
+                  <View style={styles.shutterButtonInner} />
+                </Pressable>
+
+                <Pressable
+                  onPress={flipCamera}
+                  style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
+                  accessibilityLabel="Switch camera"
+                  disabled={savingPhoto || importingPhoto}
+                >
+                  <Text style={styles.cameraSideIcon}>↻</Text>
+                </Pressable>
+              </View>
+              <View
+                style={styles.cameraStatusWrap}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
+                <Text style={styles.cameraStatusText}>{savingPhoto ? "Saving..." : importingPhoto ? "Opening..." : " "}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -263,7 +382,7 @@ export default function App() {
         </View>
       </Modal>
 
-      <ScrollView contentContainerStyle={styles.container}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <Text style={styles.title}>Side Quest Slayer</Text>
         </View>
@@ -297,7 +416,10 @@ export default function App() {
                 </View>
               </View>
 
-              <View style={styles.scrapbookArea}>
+              <View
+                onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
+                style={styles.scrapbookArea}
+              >
                 {entries.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>No moments yet</Text>
@@ -312,6 +434,7 @@ export default function App() {
                             key={item.id}
                             item={item}
                             index={index + columnIndex}
+                            isHighlighted={item.id === highlightedMomentId}
                             onPress={() => {
                               setMomentMenuOpen(false);
                               setSelectedMoment(item);
@@ -374,6 +497,9 @@ export default function App() {
           </View>
         )}
       </ScrollView>
+      {highlightedMomentId !== null && screen === "home" ? (
+        <CelebrationOverlay key={celebrationKey} onDone={clearCelebration} />
+      ) : null}
       <View style={styles.bottomNav}>
         <Pressable onPress={() => setScreen("home")} style={screen === "home" ? styles.navItemActive : styles.navItem}>
           <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>📓</Text>
@@ -412,28 +538,162 @@ function JourneyPanel({ label, entry }: { label: string; entry: JournalEntry | n
 function MomentTile({
   item,
   index,
+  isHighlighted,
   onPress,
 }: {
   item: JournalEntry;
   index: number;
+  isHighlighted: boolean;
   onPress: () => void;
 }) {
+  const highlightProgress = useRef(new Animated.Value(0)).current;
   const isTall = index % 4 === 1 || index % 4 === 2;
   const rotation = index % 3 === 0 ? "-1deg" : index % 3 === 1 ? "1.25deg" : "0.5deg";
   const overlap = index % 5 === 0 ? -8 : 0;
 
+  useEffect(() => {
+    if (!isHighlighted) {
+      highlightProgress.setValue(0);
+      return;
+    }
+
+    highlightProgress.setValue(0);
+    Animated.timing(highlightProgress, {
+      toValue: 1,
+      duration: 1200,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [highlightProgress, isHighlighted]);
+
+  const scale = highlightProgress.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [1, 1.06, 1],
+  });
+  const glowOpacity = highlightProgress.interpolate({
+    inputRange: [0, 0.28, 1],
+    outputRange: [0, 0.85, 0],
+  });
+  const sparkleOpacity = highlightProgress.interpolate({
+    inputRange: [0, 0.16, 0.78, 1],
+    outputRange: [0, 1, 1, 0],
+  });
+
   return (
-    <Pressable
-      onPress={onPress}
+    <Animated.View
       style={[
         styles.momentTile,
         isTall ? styles.momentTileTall : styles.momentTileSquare,
-        { marginTop: overlap, transform: [{ rotate: rotation }] },
+        { marginTop: overlap, transform: [{ rotate: rotation }, { scale }] },
       ]}
     >
-      <Image source={{ uri: item.imageUri }} style={styles.momentTileImage} />
-      <Text style={styles.dateTag}>{formatShortDate(item.timestamp)}</Text>
-    </Pressable>
+      <Pressable onPress={onPress} style={styles.momentTileButton}>
+        <Image source={{ uri: item.imageUri }} style={styles.momentTileImage} />
+        <Animated.View pointerEvents="none" style={[styles.momentTileGlow, { opacity: glowOpacity }]} />
+        {isHighlighted ? (
+          <Animated.View pointerEvents="none" style={[styles.tileSparkleField, { opacity: sparkleOpacity }]}>
+            {TILE_SPARKLES.map((sparkle) => {
+              const translateY = highlightProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, sparkle.y],
+              });
+              const translateX = highlightProgress.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, sparkle.x],
+              });
+              const sparkleScale = highlightProgress.interpolate({
+                inputRange: [0, 0.35, 1],
+                outputRange: [0.4, sparkle.scale, 0.65],
+              });
+
+              return (
+                <Animated.View
+                  key={sparkle.id}
+                  style={[
+                    styles.sparkle,
+                    {
+                      backgroundColor: sparkle.color,
+                      left: sparkle.left,
+                      top: sparkle.top,
+                      transform: [
+                        { translateX },
+                        { translateY },
+                        { scale: sparkleScale },
+                        { rotate: sparkle.rotate },
+                      ],
+                    },
+                  ]}
+                />
+              );
+            })}
+          </Animated.View>
+        ) : null}
+        <Text style={styles.dateTag}>{formatShortDate(item.timestamp)}</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function CelebrationOverlay({ onDone }: { onDone: () => void }) {
+  const progress = useRef(new Animated.Value(0)).current;
+  const holdProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    progress.setValue(0);
+    holdProgress.setValue(0);
+    Animated.sequence([
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 550,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: 1200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(holdProgress, {
+        toValue: 1,
+        duration: 450,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start(() => onDone());
+  }, [holdProgress, onDone, progress]);
+
+  const overlayOpacity = progress.interpolate({
+    inputRange: [0, 0.2, 1],
+    outputRange: [0, 1, 1],
+  });
+  const toastTranslate = progress.interpolate({
+    inputRange: [0, 0.3, 1],
+    outputRange: [14, 0, 0],
+  });
+  const toastScale = progress.interpolate({
+    inputRange: [0, 0.25, 1],
+    outputRange: [0.96, 1, 1],
+  });
+  const toastExitOpacity = holdProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+  const toastExitTranslate = holdProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -12],
+  });
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.celebrationOverlay, { opacity: Animated.multiply(overlayOpacity, toastExitOpacity) }]}>
+      <Animated.View
+        style={[
+          styles.celebrationToast,
+          { transform: [{ translateY: Animated.add(toastTranslate, toastExitTranslate) }, { scale: toastScale }] },
+        ]}
+      >
+        <Text style={styles.celebrationToastText}>Moment captured</Text>
+      </Animated.View>
+    </Animated.View>
   );
 }
 
@@ -661,25 +921,100 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     backgroundColor: "rgba(16, 8, 3, 0.24)",
   },
+  cameraHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  cameraCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraCloseText: {
+    color: "#fff",
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "500",
+  },
   cameraQuestTitle: {
+    flex: 1,
     color: "#fff",
     fontSize: 32,
     fontWeight: "900",
-    maxWidth: "80%",
   },
   cameraActions: {
-    gap: 12,
-  },
-  captureButton: {
-    backgroundColor: palette.accent,
-    borderRadius: 8,
+    gap: 10,
     alignItems: "center",
-    paddingVertical: 18,
   },
-  captureButtonText: {
+  cameraControlBar: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+  },
+  cameraSideControl: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraSideControlDisabled: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.58,
+  },
+  cameraSideIcon: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "900",
+  },
+  shutterButton: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "rgba(255, 255, 255, 0.36)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.86)",
+  },
+  shutterButtonDisabled: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "rgba(255, 255, 255, 0.24)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.62)",
+    opacity: 0.68,
+  },
+  shutterButtonInner: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#fff",
+  },
+  cameraStatusWrap: {
+    minHeight: 18,
+  },
+  cameraStatusText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
   },
   modalBackdrop: {
     flex: 1,
@@ -896,7 +1231,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   momentTile: {
-    overflow: "hidden",
+    overflow: "visible",
     borderRadius: 8,
     borderWidth: 4,
     borderColor: "#fff",
@@ -906,6 +1241,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
+  },
+  momentTileButton: {
+    flex: 1,
+  },
+  momentTileGlow: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: palette.accentSoft,
+    borderWidth: 3,
+    borderColor: palette.gold,
   },
   momentTileSquare: {
     aspectRatio: 1,
@@ -931,6 +1275,39 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 11,
     fontWeight: "800",
+  },
+  celebrationOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 5,
+  },
+  tileSparkleField: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sparkle: {
+    position: "absolute",
+    width: 12,
+    height: 12,
+    borderRadius: 4,
+  },
+  celebrationToast: {
+    position: "absolute",
+    bottom: 116,
+    backgroundColor: palette.accent,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 7,
+  },
+  celebrationToastText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
   },
   bottomNav: {
     position: "absolute",
