@@ -44,7 +44,12 @@ type JourneyState = {
   latest: JournalEntry | null;
 };
 
-const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️"];
+type MomentSection = {
+  title: string;
+  entries: JournalEntry[];
+};
+
+const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const TILE_SPARKLES = [
   { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
   { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.gold },
@@ -79,7 +84,8 @@ export default function App() {
   const [journeyPair, setJourneyPair] = useState<JourneyState>({ first: null, latest: null });
 
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
-  const momentColumns = useMemo(() => createMomentColumns(entries, width >= 720 ? 3 : 2), [entries, width]);
+  const momentSections = useMemo(() => createMomentSections(entries), [entries]);
+  const momentTileWidth = Math.floor((width - 46) / 2);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -350,7 +356,7 @@ export default function App() {
       <Modal animationType="fade" transparent visible={emojiPickerOpen}>
         <Pressable style={styles.modalBackdrop} onPress={() => setEmojiPickerOpen(false)}>
           <Pressable style={styles.emojiPickerCard}>
-            <Text style={styles.modalTitle}>Choose a quest mark</Text>
+            <Text style={styles.modalTitle}>Choose An Emoji</Text>
             <View style={styles.emojiGrid}>
               {EMOJI_OPTIONS.map((emoji) => (
                 <Pressable key={emoji} onPress={() => handleEmojiSelect(emoji)} style={styles.emojiChoice}>
@@ -365,11 +371,18 @@ export default function App() {
       <Modal animationType="fade" visible={!!selectedMoment}>
         <View style={styles.momentScreen}>
           <View style={styles.momentTopBar}>
-            <Pressable onPress={() => setSelectedMoment(null)} style={styles.momentIconButton}>
-              <Text style={styles.momentIconText}>Close</Text>
-            </Pressable>
             <Pressable onPress={() => setMomentMenuOpen((isOpen) => !isOpen)} style={styles.momentIconButton}>
               <Text style={styles.momentDots}>...</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                setMomentMenuOpen(false);
+                setSelectedMoment(null);
+              }}
+              style={styles.momentCloseButton}
+              accessibilityLabel="Close moment"
+            >
+              <Text style={styles.momentCloseText}>×</Text>
             </Pressable>
           </View>
           {selectedMoment ? <Image source={{ uri: selectedMoment.imageUri }} style={styles.momentImage} /> : null}
@@ -409,7 +422,7 @@ export default function App() {
               </View>
 
               <View style={styles.journeyCard}>
-                <Text style={styles.sectionTitle}>Your Journey So Far</Text>
+                <Text style={styles.sectionTitle}>From Then to Now</Text>
                 <View style={styles.bridgeRow}>
                   <JourneyPanel label="First" entry={journeyPair.first} />
                   <JourneyPanel label="Latest" entry={journeyPair.latest} />
@@ -420,27 +433,32 @@ export default function App() {
                 onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
                 style={styles.scrapbookArea}
               >
+                <Text style={styles.sectionTitle}>Your Moments</Text>
                 {entries.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>No moments yet</Text>
                     <Text style={styles.sectionText}>Your first photo will start the record.</Text>
                   </View>
                 ) : (
-                  <View style={styles.masonryGrid}>
-                    {momentColumns.map((column, columnIndex) => (
-                      <View key={columnIndex} style={styles.masonryColumn}>
-                        {column.map((item, index) => (
-                          <MomentTile
-                            key={item.id}
-                            item={item}
-                            index={index + columnIndex}
-                            isHighlighted={item.id === highlightedMomentId}
-                            onPress={() => {
-                              setMomentMenuOpen(false);
-                              setSelectedMoment(item);
-                            }}
-                          />
-                        ))}
+                  <View style={styles.momentSections}>
+                    {momentSections.map((section) => (
+                      <View key={section.title} style={styles.momentSection}>
+                        <Text style={styles.momentSectionTitle}>{section.title}</Text>
+                        <View style={styles.momentGrid}>
+                          {section.entries.map((item, index) => (
+                            <MomentTile
+                              key={item.id}
+                              item={item}
+                              index={index}
+                              isHighlighted={item.id === highlightedMomentId}
+                              tileWidth={momentTileWidth}
+                              onPress={() => {
+                                setMomentMenuOpen(false);
+                                setSelectedMoment(item);
+                              }}
+                            />
+                          ))}
+                        </View>
                       </View>
                     ))}
                   </View>
@@ -539,17 +557,17 @@ function MomentTile({
   item,
   index,
   isHighlighted,
+  tileWidth,
   onPress,
 }: {
   item: JournalEntry;
   index: number;
   isHighlighted: boolean;
+  tileWidth: number;
   onPress: () => void;
 }) {
   const highlightProgress = useRef(new Animated.Value(0)).current;
-  const isTall = index % 4 === 1 || index % 4 === 2;
-  const rotation = index % 3 === 0 ? "-1deg" : index % 3 === 1 ? "1.25deg" : "0.5deg";
-  const overlap = index % 5 === 0 ? -8 : 0;
+  const isTall = index % 4 === 0;
 
   useEffect(() => {
     if (!isHighlighted) {
@@ -584,7 +602,7 @@ function MomentTile({
       style={[
         styles.momentTile,
         isTall ? styles.momentTileTall : styles.momentTileSquare,
-        { marginTop: overlap, transform: [{ rotate: rotation }, { scale }] },
+        { width: tileWidth, transform: [{ scale }] },
       ]}
     >
       <Pressable onPress={onPress} style={styles.momentTileButton}>
@@ -697,14 +715,63 @@ function CelebrationOverlay({ onDone }: { onDone: () => void }) {
   );
 }
 
-function createMomentColumns(entries: JournalEntry[], columnCount: number) {
-  const columns = Array.from({ length: columnCount }, () => [] as JournalEntry[]);
+function createMomentSections(entries: JournalEntry[]) {
+  const sortedEntries = [...entries].sort(
+    (first, second) => new Date(second.timestamp).getTime() - new Date(first.timestamp).getTime()
+  );
+  const sections: MomentSection[] = [];
+  const sectionByTitle = new Map<string, MomentSection>();
 
-  entries.forEach((entry, index) => {
-    columns[index % columnCount].push(entry);
+  sortedEntries.forEach((entry) => {
+    const title = getMomentSectionTitle(entry.timestamp);
+    let section = sectionByTitle.get(title);
+
+    if (!section) {
+      section = { title, entries: [] };
+      sectionByTitle.set(title, section);
+      sections.push(section);
+    }
+
+    section.entries.push(entry);
   });
 
-  return columns;
+  return sections;
+}
+
+function getMomentSectionTitle(dateString: string) {
+  const momentDate = new Date(dateString);
+  const today = startOfDay(new Date());
+  const yesterday = addDays(today, -1);
+  const thisWeekStart = addDays(today, -6);
+  const momentDay = startOfDay(momentDate);
+
+  if (momentDay.getTime() === today.getTime()) {
+    return "TODAY";
+  }
+
+  if (momentDay.getTime() === yesterday.getTime()) {
+    return "YESTERDAY";
+  }
+
+  if (momentDay >= thisWeekStart) {
+    return "THIS WEEK";
+  }
+
+  if (momentDay.getFullYear() === today.getFullYear()) {
+    return momentDate.toLocaleDateString(undefined, { month: "long" }).toUpperCase();
+  }
+
+  return String(momentDay.getFullYear());
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate;
 }
 
 function getQuestEmoji(title: string) {
@@ -718,12 +785,24 @@ function getQuestEmoji(title: string) {
     return "💃";
   }
 
-  if (/\b(gym|fitness|workout|lift|run|runner|strength)\b/.test(normalizedTitle)) {
+  if (/\b(act|acting|actor|actress|theater|theatre|drama|audition|monologue)\b/.test(normalizedTitle)) {
+    return "🎭";
+  }
+
+  if (/\b(run|runner|running|marathon|race|jog|jogging)\b/.test(normalizedTitle)) {
+    return "🏃‍♀️";
+  }
+
+  if (/\b(gym|fitness|workout|lift|strength)\b/.test(normalizedTitle)) {
     return "💪";
   }
 
   if (/\b(school|college|study|student|graduate|degree|class)\b/.test(normalizedTitle)) {
     return "🎓";
+  }
+
+  if (/\b(learn|learning|read|reading|books|brain)\b/.test(normalizedTitle)) {
+    return "🧠";
   }
 
   if (/\b(code|coding|app|developer|software|program)\b/.test(normalizedTitle)) {
@@ -1070,18 +1149,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   momentIconButton: {
+    width: 44,
+    height: 44,
     backgroundColor: "rgba(255, 255, 255, 0.16)",
     borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  momentIconText: {
+  momentCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  momentCloseText: {
     color: "#fff",
-    fontWeight: "800",
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "500",
   },
   momentDots: {
     color: "#fff",
     fontSize: 18,
+    lineHeight: 20,
     fontWeight: "900",
   },
   momentImage: {
@@ -1097,7 +1189,7 @@ const styles = StyleSheet.create({
   },
   deleteMomentButton: {
     position: "absolute",
-    right: 18,
+    left: 18,
     top: 104,
     backgroundColor: palette.dangerSoft,
     borderRadius: 8,
@@ -1221,35 +1313,45 @@ const styles = StyleSheet.create({
   scrapbookArea: {
     gap: 14,
   },
-  masonryGrid: {
-    flexDirection: "row",
-    gap: 10,
-    paddingTop: 8,
+  momentSections: {
+    gap: 18,
   },
-  masonryColumn: {
-    flex: 1,
-    gap: 10,
+  momentSection: {
+    gap: 8,
+  },
+  momentSectionTitle: {
+    color: palette.muted,
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0,
+    opacity: 0.78,
+  },
+  momentGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
   },
   momentTile: {
     overflow: "visible",
     borderRadius: 8,
-    borderWidth: 4,
-    borderColor: "#fff",
-    backgroundColor: palette.card,
+    backgroundColor: palette.panel,
     shadowColor: palette.shadow,
-    shadowOpacity: 1,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowOpacity: 0.42,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   momentTileButton: {
     flex: 1,
+    borderRadius: 8,
   },
   momentTileGlow: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: palette.accentSoft,
-    borderWidth: 3,
-    borderColor: palette.gold,
+    backgroundColor: "rgba(124, 58, 237, 0.18)",
+    borderWidth: 2,
+    borderColor: "rgba(245, 192, 97, 0.8)",
+    borderRadius: 8,
   },
   momentTileSquare: {
     aspectRatio: 1,
@@ -1260,15 +1362,16 @@ const styles = StyleSheet.create({
   momentTileImage: {
     width: "100%",
     height: "100%",
+    borderRadius: 8,
     resizeMode: "cover",
     backgroundColor: palette.panel,
   },
   dateTag: {
     position: "absolute",
-    right: 7,
+    left: 8,
     bottom: 7,
-    backgroundColor: "rgba(255, 255, 255, 0.86)",
-    color: palette.ink,
+    backgroundColor: "rgba(40, 33, 48, 0.56)",
+    color: "#fff",
     borderRadius: 6,
     overflow: "hidden",
     paddingHorizontal: 7,
