@@ -52,12 +52,12 @@ type MomentSection = {
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const TILE_SPARKLES = [
   { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
-  { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.gold },
+  { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.accentSoft },
   { id: "top-right", left: 92, top: 52, x: 42, y: -34, scale: 1, rotate: "24deg", color: palette.accentSoft },
-  { id: "left", left: 52, top: 76, x: -52, y: 4, scale: 0.82, rotate: "45deg", color: palette.gold },
+  { id: "left", left: 52, top: 76, x: -52, y: 4, scale: 0.82, rotate: "45deg", color: palette.accent },
   { id: "right", left: 96, top: 76, x: 54, y: 2, scale: 0.88, rotate: "-28deg", color: palette.accent },
   { id: "bottom-left", left: 64, top: 98, x: -30, y: 36, scale: 0.72, rotate: "8deg", color: palette.accentSoft },
-  { id: "bottom-right", left: 88, top: 98, x: 30, y: 34, scale: 0.76, rotate: "-18deg", color: palette.gold },
+  { id: "bottom-right", left: 88, top: 98, x: 30, y: 34, scale: 0.76, rotate: "-18deg", color: palette.accent },
 ];
 
 export default function App() {
@@ -520,14 +520,18 @@ export default function App() {
       ) : null}
       <View style={styles.bottomNav}>
         <Pressable onPress={() => setScreen("home")} style={screen === "home" ? styles.navItemActive : styles.navItem}>
-          <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>📓</Text>
+          <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>
+            {screen === "home" ? "▣" : "▢"}
+          </Text>
           <Text style={screen === "home" ? styles.navTextActive : styles.navText}>Journal</Text>
         </Pressable>
         <Pressable
           onPress={() => setScreen("trophies")}
           style={screen === "trophies" ? styles.navItemActive : styles.navItem}
         >
-          <Text style={screen === "trophies" ? styles.navIconActive : styles.navIcon}>🏆</Text>
+          <Text style={screen === "trophies" ? styles.navIconActive : styles.navIcon}>
+            {screen === "trophies" ? "★" : "☆"}
+          </Text>
           <Text style={screen === "trophies" ? styles.navTextActive : styles.navText}>Trophy Room</Text>
         </Pressable>
       </View>
@@ -861,7 +865,7 @@ const styles = StyleSheet.create({
   container: {
     padding: 18,
     paddingBottom: 132,
-    gap: 18,
+    gap: 26,
   },
   loadingScreen: {
     flex: 1,
@@ -888,17 +892,23 @@ const styles = StyleSheet.create({
     backgroundColor: palette.card,
     borderRadius: 8,
     padding: 20,
-    borderWidth: 1,
-    borderColor: palette.border,
     gap: 14,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.42,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   sectionCard: {
     backgroundColor: palette.card,
     borderRadius: 8,
     padding: 18,
-    borderWidth: 1,
-    borderColor: palette.border,
     gap: 14,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.36,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   sectionTitle: {
     fontSize: 22,
@@ -961,8 +971,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 18,
     backgroundColor: palette.panel,
-    borderWidth: 1,
-    borderColor: palette.border,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   emptyTitle: {
     fontSize: 18,
@@ -971,12 +984,15 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   trophyCard: {
-    backgroundColor: "#fff8d9",
+    backgroundColor: palette.card,
     borderRadius: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: palette.gold,
     marginTop: 10,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 1,
   },
   trophyTitle: {
     fontSize: 18,
@@ -1201,17 +1217,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   questCard: {
-    backgroundColor: palette.card,
+    backgroundColor: palette.panel,
     borderRadius: 8,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: palette.border,
-    gap: 18,
-    shadowColor: palette.shadow,
+    padding: 22,
+    gap: 22,
+    shadowColor: palette.shadowStrong,
     shadowOpacity: 1,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 10,
   },
   questHeader: {
     flexDirection: "row",
@@ -1225,8 +1239,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.accentSoft,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: palette.border,
   },
   questEmoji: {
     fontSize: 40,
@@ -1267,12 +1279,15 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   journeyCard: {
-    backgroundColor: "#fff8d9",
+    backgroundColor: palette.card,
     borderRadius: 8,
     padding: 18,
-    borderWidth: 1,
-    borderColor: palette.gold,
     gap: 14,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.34,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
   bridgeRow: {
     flexDirection: "row",
@@ -1285,7 +1300,7 @@ const styles = StyleSheet.create({
   bridgeLabel: {
     textAlign: "center",
     fontWeight: "800",
-    color: palette.accentDark,
+    color: palette.ink,
   },
   bridgeImage: {
     width: "100%",
@@ -1300,7 +1315,7 @@ const styles = StyleSheet.create({
   bridgePlaceholder: {
     aspectRatio: 0.85,
     borderRadius: 8,
-    backgroundColor: "#f3f0df",
+    backgroundColor: palette.panel,
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
@@ -1311,20 +1326,20 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   scrapbookArea: {
-    gap: 14,
-  },
-  momentSections: {
     gap: 18,
   },
+  momentSections: {
+    gap: 26,
+  },
   momentSection: {
-    gap: 8,
+    gap: 10,
   },
   momentSectionTitle: {
-    color: palette.muted,
+    color: palette.ink,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0,
-    opacity: 0.78,
+    opacity: 0.7,
   },
   momentGrid: {
     flexDirection: "row",
@@ -1350,7 +1365,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(124, 58, 237, 0.18)",
     borderWidth: 2,
-    borderColor: "rgba(245, 192, 97, 0.8)",
+    borderColor: "rgba(124, 58, 237, 0.44)",
     borderRadius: 8,
   },
   momentTileSquare: {
@@ -1418,40 +1433,42 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     flexDirection: "row",
-    gap: 8,
-    backgroundColor: palette.card,
+    backgroundColor: palette.paper,
     borderTopWidth: 1,
-    borderTopColor: palette.border,
+    borderTopColor: "rgba(124, 58, 237, 0.12)",
     paddingHorizontal: 14,
-    paddingTop: 10,
+    paddingTop: 8,
     paddingBottom: 18,
     shadowColor: palette.shadowStrong,
-    shadowOpacity: 1,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: -6 },
-    elevation: 10,
+    shadowOpacity: 0.42,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
   },
   navItem: {
     flex: 1,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 8,
     alignItems: "center",
     gap: 4,
   },
   navItemActive: {
     flex: 1,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 8,
     alignItems: "center",
     gap: 4,
-    backgroundColor: palette.accent,
   },
   navIcon: {
+    color: palette.muted,
     fontSize: 20,
-    opacity: 0.72,
+    fontWeight: "900",
+    opacity: 0.68,
   },
   navIconActive: {
+    color: palette.accent,
     fontSize: 20,
+    fontWeight: "900",
   },
   navText: {
     color: palette.muted,
@@ -1459,7 +1476,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   navTextActive: {
-    color: "#fff",
+    color: palette.accent,
     fontSize: 12,
     fontWeight: "900",
   },
