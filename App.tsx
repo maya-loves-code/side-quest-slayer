@@ -9,7 +9,9 @@ import {
   Animated,
   Easing,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -22,6 +24,7 @@ import {
 
 import {
   addEntry,
+  clearEntryCaption,
   completeQuest,
   createQuest,
   deleteEntry,
@@ -50,6 +53,7 @@ type MomentSection = {
 };
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
+const CAPTION_CHARACTER_LIMIT = 180;
 const TILE_SPARKLES = [
   { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
   { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.accentSoft },
@@ -73,6 +77,8 @@ export default function App() {
   const [archivedQuests, setArchivedQuests] = useState<Quest[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
+  const [captionDraft, setCaptionDraft] = useState("");
+  const [pendingImportUri, setPendingImportUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
@@ -139,7 +145,7 @@ export default function App() {
   }
 
   async function handleCapturePhoto() {
-    if (!cameraRef.current || !activeQuest || savingPhoto || importingPhoto) {
+    if (!cameraRef.current || !activeQuest || pendingImportUri || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -152,7 +158,7 @@ export default function App() {
       }
 
       const savedUri = await saveCapturedPhoto(photo.uri);
-      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0);
+      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -188,15 +194,35 @@ export default function App() {
         return;
       }
 
-      const savedUri = await saveImportedPhoto(result.assets[0].uri);
-      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0);
-      await finishMomentAdded();
+      setPendingImportUri(result.assets[0].uri);
     } catch (error) {
       console.error(error);
       Alert.alert("Upload error", "That photo did not save. Try one more time.");
     } finally {
       setImportingPhoto(false);
     }
+  }
+
+  async function handleSaveImportedPhoto() {
+    if (!activeQuest || !pendingImportUri || savingPhoto || importingPhoto) {
+      return;
+    }
+
+    try {
+      setSavingPhoto(true);
+      const savedUri = await saveImportedPhoto(pendingImportUri);
+      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await finishMomentAdded();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Upload error", "That photo did not save. Try one more time.");
+    } finally {
+      setSavingPhoto(false);
+    }
+  }
+
+  function cancelPendingImport() {
+    setPendingImportUri(null);
   }
 
   function flipCamera() {
@@ -209,6 +235,8 @@ export default function App() {
 
   async function finishMomentAdded() {
     setCameraOpen(false);
+    setCaptionDraft("");
+    setPendingImportUri(null);
     const questEntries = await refreshData();
     const newestMoment = questEntries[0];
 
@@ -257,7 +285,19 @@ export default function App() {
     }
 
     setCameraFacing("back");
+    setCaptionDraft("");
     setCameraOpen(true);
+  }
+
+  function closeCamera() {
+    setCameraOpen(false);
+    setCaptionDraft("");
+    setPendingImportUri(null);
+  }
+
+  function openMoment(moment: JournalEntry) {
+    setMomentMenuOpen(false);
+    setSelectedMoment(moment);
   }
 
   async function handleEmojiSelect(emoji: string) {
@@ -283,6 +323,18 @@ export default function App() {
     await refreshData();
   }
 
+  async function handleDeleteSelectedMomentText() {
+    if (!selectedMoment) {
+      return;
+    }
+
+    const momentId = selectedMoment.id;
+    await clearEntryCaption(momentId);
+    const questEntries = await refreshData();
+    setSelectedMoment(questEntries.find((entry) => entry.id === momentId) ?? { ...selectedMoment, caption: null });
+    setMomentMenuOpen(false);
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
@@ -296,60 +348,123 @@ export default function App() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
-      <Modal animationType="slide" visible={cameraOpen}>
+      <Modal animationType="slide" visible={cameraOpen} onRequestClose={closeCamera}>
         <View style={styles.cameraScreen}>
           <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
-          <View style={styles.cameraOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            keyboardVerticalOffset={0}
+            style={styles.cameraOverlay}
+          >
             <View style={styles.cameraHeader}>
               <Text style={styles.cameraQuestTitle}>
                 {activeEmoji} {activeQuest?.title}
               </Text>
               <Pressable
-                onPress={() => setCameraOpen(false)}
+                onPress={closeCamera}
                 style={styles.cameraCloseButton}
                 accessibilityLabel="Close camera"
               >
                 <Text style={styles.cameraCloseText}>×</Text>
               </Pressable>
             </View>
-            <View style={styles.cameraActions}>
-              <View style={styles.cameraControlBar}>
-                <Pressable
-                  onPress={handleImportPhoto}
-                  style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
-                  accessibilityLabel="Upload photo from camera roll"
-                  disabled={savingPhoto || importingPhoto}
+            {pendingImportUri ? (
+              <View style={styles.importPreviewPanel}>
+                <Image source={{ uri: pendingImportUri }} style={styles.importPreviewImage} />
+                <View style={styles.cameraCaptionCard}>
+                  <TextInput
+                    value={captionDraft}
+                    onChangeText={setCaptionDraft}
+                    placeholder="Write a little something to celebrate you..."
+                    placeholderTextColor="rgba(255, 255, 255, 0.72)"
+                    style={styles.cameraCaptionInput}
+                    maxLength={CAPTION_CHARACTER_LIMIT}
+                    multiline
+                    editable={!savingPhoto && !importingPhoto}
+                  />
+                  <Text style={styles.cameraCaptionCounter}>
+                    {captionDraft.length}/{CAPTION_CHARACTER_LIMIT}
+                  </Text>
+                </View>
+                <View style={styles.importPreviewActions}>
+                  <Pressable
+                    onPress={cancelPendingImport}
+                    style={savingPhoto ? styles.importSecondaryButtonDisabled : styles.importSecondaryButton}
+                    disabled={savingPhoto}
+                  >
+                    <Text style={styles.importSecondaryButtonText}>Choose Again</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleSaveImportedPhoto}
+                    style={savingPhoto ? styles.importPrimaryButtonDisabled : styles.importPrimaryButton}
+                    disabled={savingPhoto}
+                  >
+                    <Text style={styles.importPrimaryButtonText}>Save Upload</Text>
+                  </Pressable>
+                </View>
+                <View
+                  style={styles.cameraStatusWrap}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
                 >
-                  <Text style={styles.cameraSideIcon}>🖼️</Text>
-                </Pressable>
-
-                <Pressable
-                  disabled={savingPhoto || importingPhoto}
-                  onPress={handleCapturePhoto}
-                  style={savingPhoto || importingPhoto ? styles.shutterButtonDisabled : styles.shutterButton}
-                  accessibilityLabel="Take photo"
-                >
-                  <View style={styles.shutterButtonInner} />
-                </Pressable>
-
-                <Pressable
-                  onPress={flipCamera}
-                  style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
-                  accessibilityLabel="Switch camera"
-                  disabled={savingPhoto || importingPhoto}
-                >
-                  <Text style={styles.cameraSideIcon}>↻</Text>
-                </Pressable>
+                  <Text style={styles.cameraStatusText}>{savingPhoto ? "Saving..." : " "}</Text>
+                </View>
               </View>
-              <View
-                style={styles.cameraStatusWrap}
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-              >
-                <Text style={styles.cameraStatusText}>{savingPhoto ? "Saving..." : importingPhoto ? "Opening..." : " "}</Text>
+            ) : (
+              <View style={styles.cameraActions}>
+                <View style={styles.cameraCaptionCard}>
+                  <TextInput
+                    value={captionDraft}
+                    onChangeText={setCaptionDraft}
+                    placeholder="Write a little something to celebrate you..."
+                    placeholderTextColor="rgba(255, 255, 255, 0.72)"
+                    style={styles.cameraCaptionInput}
+                    maxLength={CAPTION_CHARACTER_LIMIT}
+                    multiline
+                    editable={!savingPhoto && !importingPhoto}
+                  />
+                  <Text style={styles.cameraCaptionCounter}>
+                    {captionDraft.length}/{CAPTION_CHARACTER_LIMIT}
+                  </Text>
+                </View>
+                <View style={styles.cameraControlBar}>
+                  <Pressable
+                    onPress={handleImportPhoto}
+                    style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
+                    accessibilityLabel="Upload photo from camera roll"
+                    disabled={savingPhoto || importingPhoto}
+                  >
+                    <Text style={styles.cameraSideIcon}>🖼️</Text>
+                  </Pressable>
+
+                  <Pressable
+                    disabled={savingPhoto || importingPhoto}
+                    onPress={handleCapturePhoto}
+                    style={savingPhoto || importingPhoto ? styles.shutterButtonDisabled : styles.shutterButton}
+                    accessibilityLabel="Take photo"
+                  >
+                    <View style={styles.shutterButtonInner} />
+                  </Pressable>
+
+                  <Pressable
+                    onPress={flipCamera}
+                    style={savingPhoto || importingPhoto ? styles.cameraSideControlDisabled : styles.cameraSideControl}
+                    accessibilityLabel="Switch camera"
+                    disabled={savingPhoto || importingPhoto}
+                  >
+                    <Text style={styles.cameraSideIcon}>↻</Text>
+                  </Pressable>
+                </View>
+                <View
+                  style={styles.cameraStatusWrap}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  <Text style={styles.cameraStatusText}>{savingPhoto ? "Saving..." : importingPhoto ? "Opening..." : " "}</Text>
+                </View>
               </View>
-            </View>
-          </View>
+            )}
+          </KeyboardAvoidingView>
         </View>
       </Modal>
 
@@ -368,8 +483,18 @@ export default function App() {
         </Pressable>
       </Modal>
 
-      <Modal animationType="fade" visible={!!selectedMoment}>
+      <Modal
+        animationType="fade"
+        visible={!!selectedMoment}
+        onRequestClose={() => {
+          setMomentMenuOpen(false);
+          setSelectedMoment(null);
+        }}
+      >
         <View style={styles.momentScreen}>
+          <View pointerEvents="none" style={styles.momentGradientBase} />
+          <View pointerEvents="none" style={styles.momentGradientTop} />
+          <View pointerEvents="none" style={styles.momentGradientBottom} />
           <View style={styles.momentTopBar}>
             <Pressable onPress={() => setMomentMenuOpen((isOpen) => !isOpen)} style={styles.momentIconButton}>
               <Text style={styles.momentDots}>...</Text>
@@ -385,12 +510,34 @@ export default function App() {
               <Text style={styles.momentCloseText}>×</Text>
             </Pressable>
           </View>
-          {selectedMoment ? <Image source={{ uri: selectedMoment.imageUri }} style={styles.momentImage} /> : null}
-          <Text style={styles.momentTimestamp}>{formatTimestamp(selectedMoment?.timestamp ?? null)}</Text>
+          {selectedMoment ? (
+            <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption)} />
+          ) : null}
+          {selectedMoment?.caption ? (
+            <ScrollView
+              style={getMomentReflectionStyle(selectedMoment.caption)}
+              contentContainerStyle={styles.momentReflectionContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <ReflectionText caption={selectedMoment.caption} />
+              <Text style={styles.momentTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
+            </ScrollView>
+          ) : (
+            <Text style={[styles.momentTimestamp, styles.momentTimestampSolo]}>
+              {formatTimestamp(selectedMoment?.timestamp ?? null)}
+            </Text>
+          )}
           {momentMenuOpen ? (
-            <Pressable onPress={handleDeleteSelectedMoment} style={styles.deleteMomentButton}>
-              <Text style={styles.deleteMomentText}>Delete moment</Text>
-            </Pressable>
+            <View style={styles.momentMenu}>
+              {selectedMoment?.caption ? (
+                <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
+                  <Text style={styles.deleteTextButtonText}>Delete text</Text>
+                </Pressable>
+              ) : null}
+              <Pressable onPress={handleDeleteSelectedMoment} style={styles.deleteMomentButton}>
+                <Text style={styles.deleteMomentText}>Delete moment</Text>
+              </Pressable>
+            </View>
           ) : null}
         </View>
       </Modal>
@@ -416,16 +563,15 @@ export default function App() {
                   </View>
                 </View>
                 <Pressable onPress={openCamera} style={styles.cameraButton} accessibilityLabel="Open camera">
-                  <Text style={styles.cameraButtonIcon}>📷</Text>
-                  <Text style={styles.cameraButtonText}>Capture moment</Text>
+                  <Text style={styles.cameraButtonText}>Log Progress</Text>
                 </Pressable>
               </View>
 
               <View style={styles.journeyCard}>
                 <Text style={styles.sectionTitle}>From Then to Now</Text>
                 <View style={styles.bridgeRow}>
-                  <JourneyPanel label="First" entry={journeyPair.first} />
-                  <JourneyPanel label="Latest" entry={journeyPair.latest} />
+                  <JourneyPanel label="First" entry={journeyPair.first} onPress={openMoment} />
+                  <JourneyPanel label="Latest" entry={journeyPair.latest} onPress={openMoment} />
                 </View>
               </View>
 
@@ -433,7 +579,7 @@ export default function App() {
                 onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
                 style={styles.scrapbookArea}
               >
-                <Text style={styles.sectionTitle}>Your Moments</Text>
+                <Text style={styles.sectionTitle}>Your Journey</Text>
                 {entries.length === 0 ? (
                   <View style={styles.emptyState}>
                     <Text style={styles.emptyTitle}>No moments yet</Text>
@@ -452,10 +598,7 @@ export default function App() {
                               index={index}
                               isHighlighted={item.id === highlightedMomentId}
                               tileWidth={momentTileWidth}
-                              onPress={() => {
-                                setMomentMenuOpen(false);
-                                setSelectedMoment(item);
-                              }}
+                              onPress={() => openMoment(item)}
                             />
                           ))}
                         </View>
@@ -523,7 +666,7 @@ export default function App() {
           <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>
             {screen === "home" ? "▣" : "▢"}
           </Text>
-          <Text style={screen === "home" ? styles.navTextActive : styles.navText}>Journal</Text>
+          <Text style={screen === "home" ? styles.navTextActive : styles.navText}>Quest</Text>
         </Pressable>
         <Pressable
           onPress={() => setScreen("trophies")}
@@ -539,15 +682,27 @@ export default function App() {
   );
 }
 
-function JourneyPanel({ label, entry }: { label: string; entry: JournalEntry | null }) {
+function JourneyPanel({
+  label,
+  entry,
+  onPress,
+}: {
+  label: string;
+  entry: JournalEntry | null;
+  onPress: (entry: JournalEntry) => void;
+}) {
   return (
     <View style={styles.bridgePanel}>
       <Text style={styles.bridgeLabel}>{label}</Text>
       {entry ? (
-        <View style={styles.bridgeImageWrap}>
+        <Pressable
+          onPress={() => onPress(entry)}
+          style={styles.bridgeImageWrap}
+          accessibilityLabel={`Open ${label.toLowerCase()} moment`}
+        >
           <Image source={{ uri: entry.imageUri }} style={styles.bridgeImage} />
           <Text style={styles.dateTag}>{formatShortDate(entry.timestamp)}</Text>
-        </View>
+        </Pressable>
       ) : (
         <View style={styles.bridgePlaceholder}>
           <Text style={styles.placeholderText}>Waiting for a moment</Text>
@@ -719,6 +874,49 @@ function CelebrationOverlay({ onDone }: { onDone: () => void }) {
   );
 }
 
+function ReflectionText({ caption }: { caption: string }) {
+  const { firstSentence, remainingText } = splitFirstSentence(caption);
+
+  return (
+    <Text style={styles.momentCaption}>
+      <Text style={styles.momentCaptionLead}>{firstSentence}</Text>
+      {remainingText ? ` ${remainingText}` : ""}
+    </Text>
+  );
+}
+
+function getMomentImageStyle(caption: string | null) {
+  const captionLength = caption?.trim().length ?? 0;
+
+  if (captionLength === 0) {
+    return [styles.momentImage, styles.momentImageNoCaption];
+  }
+
+  if (captionLength <= 45) {
+    return [styles.momentImage, styles.momentImageShortCaption];
+  }
+
+  if (captionLength <= 120) {
+    return [styles.momentImage, styles.momentImageMediumCaption];
+  }
+
+  return [styles.momentImage, styles.momentImageLongCaption];
+}
+
+function getMomentReflectionStyle(caption: string) {
+  const captionLength = caption.trim().length;
+
+  if (captionLength <= 45) {
+    return [styles.momentReflectionScroll, styles.momentReflectionShort];
+  }
+
+  if (captionLength <= 120) {
+    return [styles.momentReflectionScroll, styles.momentReflectionMedium];
+  }
+
+  return [styles.momentReflectionScroll, styles.momentReflectionLong];
+}
+
 function createMomentSections(entries: JournalEntry[]) {
   const sortedEntries = [...entries].sort(
     (first, second) => new Date(second.timestamp).getTime() - new Date(first.timestamp).getTime()
@@ -848,13 +1046,32 @@ function formatTimestamp(dateString: string | null) {
     return "";
   }
 
-  return new Date(dateString).toLocaleString(undefined, {
+  const date = new Date(dateString);
+  const datePart = date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
+  });
+  const timePart = date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
+
+  return `${datePart} • ${timePart}`;
+}
+
+function splitFirstSentence(text: string) {
+  const trimmedText = text.trim();
+  const sentenceMatch = trimmedText.match(/^(.+?[.!?])(\s+[\s\S]*)?$/);
+
+  if (!sentenceMatch) {
+    return { firstSentence: trimmedText, remainingText: "" };
+  }
+
+  return {
+    firstSentence: sentenceMatch[1],
+    remainingText: sentenceMatch[2]?.trim() ?? "",
+  };
 }
 
 const styles = StyleSheet.create({
@@ -1046,6 +1263,97 @@ const styles = StyleSheet.create({
     gap: 10,
     alignItems: "center",
   },
+  cameraCaptionCard: {
+    width: "100%",
+    backgroundColor: "rgba(20, 11, 16, 0.5)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 6,
+  },
+  cameraCaptionInput: {
+    minHeight: 56,
+    maxHeight: 92,
+    color: "#fff",
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "700",
+    padding: 0,
+    textAlignVertical: "top",
+  },
+  cameraCaptionCounter: {
+    color: "rgba(255, 255, 255, 0.72)",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "right",
+  },
+  importPreviewPanel: {
+    width: "100%",
+    gap: 10,
+    alignItems: "center",
+  },
+  importPreviewImage: {
+    width: "100%",
+    height: 220,
+    borderRadius: 8,
+    resizeMode: "cover",
+    backgroundColor: "rgba(20, 11, 16, 0.5)",
+  },
+  importPreviewActions: {
+    width: "100%",
+    flexDirection: "row",
+    gap: 10,
+  },
+  importPrimaryButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: palette.accent,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: palette.accentDark,
+  },
+  importPrimaryButtonDisabled: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: "rgba(124, 58, 237, 0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(91, 33, 182, 0.62)",
+  },
+  importPrimaryButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  importSecondaryButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  importSecondaryButtonDisabled: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.58,
+  },
+  importSecondaryButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
   cameraControlBar: {
     width: "100%",
     flexDirection: "row",
@@ -1150,16 +1458,36 @@ const styles = StyleSheet.create({
   },
   momentScreen: {
     flex: 1,
-    backgroundColor: palette.dark,
-    padding: 18,
-    justifyContent: "center",
-    gap: 16,
+    backgroundColor: "#120817",
+    paddingHorizontal: 18,
+    paddingTop: 46,
+    paddingBottom: 18,
+    gap: 22,
+    overflow: "hidden",
+  },
+  momentGradientBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#170d24",
+  },
+  momentGradientTop: {
+    position: "absolute",
+    left: -60,
+    right: -60,
+    top: -180,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: "rgba(124, 58, 237, 0.18)",
+  },
+  momentGradientBottom: {
+    position: "absolute",
+    left: -80,
+    right: -80,
+    bottom: -220,
+    height: 440,
+    borderRadius: 220,
+    backgroundColor: "rgba(216, 199, 255, 0.09)",
   },
   momentTopBar: {
-    position: "absolute",
-    left: 18,
-    right: 18,
-    top: 56,
     zIndex: 2,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1194,19 +1522,80 @@ const styles = StyleSheet.create({
   },
   momentImage: {
     width: "100%",
-    height: "72%",
     borderRadius: 8,
     resizeMode: "contain",
   },
-  momentTimestamp: {
-    color: "#fff",
-    textAlign: "center",
-    fontWeight: "700",
+  momentImageNoCaption: {
+    height: "74%",
   },
-  deleteMomentButton: {
+  momentImageShortCaption: {
+    height: "68%",
+  },
+  momentImageMediumCaption: {
+    height: "63%",
+  },
+  momentImageLongCaption: {
+    height: "58%",
+  },
+  momentTimestamp: {
+    color: "rgba(255, 255, 255, 0.58)",
+    textAlign: "left",
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "700",
+    marginTop: 14,
+  },
+  momentTimestampSolo: {
+    alignSelf: "center",
+    textAlign: "center",
+    marginTop: 0,
+  },
+  momentReflectionScroll: {
+    width: "100%",
+  },
+  momentReflectionShort: {
+    maxHeight: "16%",
+  },
+  momentReflectionMedium: {
+    maxHeight: "23%",
+  },
+  momentReflectionLong: {
+    maxHeight: "30%",
+  },
+  momentReflectionContent: {
+    width: "100%",
+    maxWidth: 460,
+    alignSelf: "center",
+    paddingHorizontal: 30,
+    paddingBottom: 8,
+  },
+  momentCaption: {
+    color: "#fff",
+    textAlign: "left",
+    fontSize: 16,
+    lineHeight: 25,
+    fontWeight: "600",
+  },
+  momentCaptionLead: {
+    fontWeight: "900",
+  },
+  momentMenu: {
     position: "absolute",
     left: 18,
     top: 104,
+    gap: 8,
+  },
+  deleteTextButton: {
+    backgroundColor: palette.card,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  deleteTextButtonText: {
+    color: palette.ink,
+    fontWeight: "900",
+  },
+  deleteMomentButton: {
     backgroundColor: palette.dangerSoft,
     borderRadius: 8,
     paddingHorizontal: 16,
@@ -1269,9 +1658,6 @@ const styles = StyleSheet.create({
     backgroundColor: palette.accent,
     borderWidth: 1,
     borderColor: palette.accentDark,
-  },
-  cameraButtonIcon: {
-    fontSize: 21,
   },
   cameraButtonText: {
     color: "#fff",

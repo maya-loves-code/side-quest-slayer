@@ -15,4 +15,5 @@ export type JournalEntry = {
   imageUri: string;
   timestamp: string;
   isMilestone: number;
+  caption: string | null;
 };

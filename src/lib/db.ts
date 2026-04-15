@@ -2,6 +2,8 @@ import * as SQLite from "expo-sqlite";
 
 import type { JournalEntry, Quest } from "../types";
 
+const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
+
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
 function getDatabase() {
@@ -33,6 +35,7 @@ export async function initializeDatabase() {
       image_uri TEXT NOT NULL,
       timestamp TEXT NOT NULL,
       is_milestone INTEGER NOT NULL DEFAULT 0,
+      caption TEXT,
       FOREIGN KEY (quest_id) REFERENCES quests (id) ON DELETE CASCADE
     );
   `);
@@ -42,6 +45,13 @@ export async function initializeDatabase() {
 
   if (!hasEmojiColumn) {
     await db.execAsync(`ALTER TABLE quests ADD COLUMN emoji TEXT;`);
+  }
+
+  const entryColumns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(entries)`);
+  const hasCaptionColumn = entryColumns.some((column) => column.name === "caption");
+
+  if (!hasCaptionColumn) {
+    await db.execAsync(`ALTER TABLE entries ADD COLUMN caption TEXT;`);
   }
 }
 
@@ -63,6 +73,7 @@ function mapEntry(row: any): JournalEntry {
     imageUri: row.image_uri,
     timestamp: row.timestamp,
     isMilestone: row.is_milestone,
+    caption: row.caption ?? null,
   };
 }
 
@@ -116,17 +127,25 @@ export async function completeQuest(questId: number) {
   );
 }
 
-export async function addEntry(questId: number, imageUri: string, isMilestone = 0) {
+export async function addEntry(questId: number, imageUri: string, isMilestone = 0, caption = "") {
   const db = await getDatabase();
   const timestamp = new Date().toISOString();
+  const savedCaption = caption.trim().slice(0, ENTRY_CAPTION_CHARACTER_LIMIT) || null;
 
   await db.runAsync(
-    `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone) VALUES (?, ?, ?, ?)`,
+    `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
     questId,
     imageUri,
     timestamp,
-    isMilestone
+    isMilestone,
+    savedCaption
   );
+}
+
+export async function clearEntryCaption(entryId: number) {
+  const db = await getDatabase();
+
+  await db.runAsync(`UPDATE entries SET caption = NULL WHERE id = ?`, entryId);
 }
 
 export async function deleteEntry(entryId: number) {
