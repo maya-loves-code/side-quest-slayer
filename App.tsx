@@ -47,6 +47,11 @@ type JourneyState = {
   latest: JournalEntry | null;
 };
 
+type ArchivedQuestView = {
+  quest: Quest;
+  entries: JournalEntry[];
+};
+
 type MomentSection = {
   title: string;
   entries: JournalEntry[];
@@ -83,14 +88,24 @@ export default function App() {
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
+  const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
   const [momentMenuOpen, setMomentMenuOpen] = useState(false);
   const [highlightedMomentId, setHighlightedMomentId] = useState<number | null>(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [scrapbookY, setScrapbookY] = useState(0);
   const [journeyPair, setJourneyPair] = useState<JourneyState>({ first: null, latest: null });
+  const [archivedQuestView, setArchivedQuestView] = useState<ArchivedQuestView | null>(null);
 
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
+  const archivedMomentSections = useMemo(
+    () => createMomentSections(archivedQuestView?.entries ?? []),
+    [archivedQuestView?.entries]
+  );
+  const archivedJourneyPair = useMemo(
+    () => getEntryJourneyPair(archivedQuestView?.entries ?? []),
+    [archivedQuestView?.entries]
+  );
   const momentTileWidth = Math.floor((width - 46) / 2);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
@@ -294,9 +309,25 @@ export default function App() {
     setPendingImportUri(null);
   }
 
-  function openMoment(moment: JournalEntry) {
+  function openMoment(moment: JournalEntry, isReadOnly = false) {
     setMomentMenuOpen(false);
+    setSelectedMomentReadOnly(isReadOnly);
     setSelectedMoment(moment);
+  }
+
+  async function openArchivedQuest(quest: Quest) {
+    const questEntries = await getEntriesForQuest(quest.id);
+    setArchivedQuestView({ quest, entries: questEntries });
+    setMomentMenuOpen(false);
+    setSelectedMoment(null);
+    setSelectedMomentReadOnly(false);
+  }
+
+  function closeArchivedQuest() {
+    setArchivedQuestView(null);
+    setMomentMenuOpen(false);
+    setSelectedMoment(null);
+    setSelectedMomentReadOnly(false);
   }
 
   async function handleEmojiSelect(emoji: string) {
@@ -488,6 +519,7 @@ export default function App() {
         onRequestClose={() => {
           setMomentMenuOpen(false);
           setSelectedMoment(null);
+          setSelectedMomentReadOnly(false);
         }}
       >
         <View style={styles.momentScreen}>
@@ -495,13 +527,18 @@ export default function App() {
           <View pointerEvents="none" style={styles.momentGradientTop} />
           <View pointerEvents="none" style={styles.momentGradientBottom} />
           <View style={styles.momentTopBar}>
-            <Pressable onPress={() => setMomentMenuOpen((isOpen) => !isOpen)} style={styles.momentIconButton}>
-              <Text style={styles.momentDots}>...</Text>
-            </Pressable>
+            {selectedMomentReadOnly ? (
+              <View style={styles.momentIconButtonPlaceholder} />
+            ) : (
+              <Pressable onPress={() => setMomentMenuOpen((isOpen) => !isOpen)} style={styles.momentIconButton}>
+                <Text style={styles.momentDots}>...</Text>
+              </Pressable>
+            )}
             <Pressable
               onPress={() => {
                 setMomentMenuOpen(false);
                 setSelectedMoment(null);
+                setSelectedMomentReadOnly(false);
               }}
               style={styles.momentCloseButton}
               accessibilityLabel="Close moment"
@@ -526,7 +563,7 @@ export default function App() {
               {formatTimestamp(selectedMoment?.timestamp ?? null)}
             </Text>
           )}
-          {momentMenuOpen ? (
+          {momentMenuOpen && !selectedMomentReadOnly ? (
             <View style={styles.momentMenu}>
               {selectedMoment?.caption ? (
                 <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
@@ -639,6 +676,61 @@ export default function App() {
               </Pressable>
             </View>
           )
+        ) : archivedQuestView ? (
+          <View style={styles.archiveDetailArea}>
+            <Pressable onPress={closeArchivedQuest} style={styles.archiveBackButton}>
+              <Text style={styles.archiveBackText}>Back to Trophy Room</Text>
+            </Pressable>
+
+            <View style={styles.sectionCard}>
+              <Text style={styles.sectionTitle}>
+                {archivedQuestView.quest.emoji ?? getQuestEmoji(archivedQuestView.quest.title)} {archivedQuestView.quest.title}
+              </Text>
+              <Text style={styles.sectionText}>
+                Started {formatDate(archivedQuestView.quest.startedAt)} • Finished {formatDate(archivedQuestView.quest.completedAt)}
+              </Text>
+              <Text style={styles.archiveStepCount}>
+                {archivedQuestView.entries.length} {archivedQuestView.entries.length === 1 ? "step" : "steps"} completed
+              </Text>
+            </View>
+
+            <View style={styles.journeyCard}>
+              <Text style={styles.sectionTitle}>From Then to Now</Text>
+              <View style={styles.bridgeRow}>
+                <JourneyPanel label="First" entry={archivedJourneyPair.first} onPress={(entry) => openMoment(entry, true)} />
+                <JourneyPanel label="Latest" entry={archivedJourneyPair.latest} onPress={(entry) => openMoment(entry, true)} />
+              </View>
+            </View>
+
+            <View style={styles.scrapbookArea}>
+              <Text style={styles.sectionTitle}>Archived Journey</Text>
+              {archivedQuestView.entries.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No steps were logged for this quest.</Text>
+                </View>
+              ) : (
+                <View style={styles.momentSections}>
+                  {archivedMomentSections.map((section) => (
+                    <View key={section.title} style={styles.momentSection}>
+                      <Text style={styles.momentSectionTitle}>{section.title}</Text>
+                      <View style={styles.momentGrid}>
+                        {section.entries.map((item, index) => (
+                          <MomentTile
+                            key={item.id}
+                            item={item}
+                            index={index}
+                            isHighlighted={false}
+                            tileWidth={momentTileWidth}
+                            onPress={() => openMoment(item, true)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
         ) : (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Trophy Room</Text>
@@ -650,12 +742,12 @@ export default function App() {
               </View>
             ) : (
               archivedQuests.map((quest) => (
-                <View key={quest.id} style={styles.trophyCard}>
+                <Pressable key={quest.id} onPress={() => openArchivedQuest(quest)} style={styles.trophyCard}>
                   <Text style={styles.trophyTitle}>{quest.title}</Text>
                   <Text style={styles.trophyMeta}>
                     Started {formatDate(quest.startedAt)} • Completed {formatDate(quest.completedAt)}
                   </Text>
-                </View>
+                </Pressable>
               ))
             )}
           </View>
@@ -665,14 +757,23 @@ export default function App() {
         <CelebrationOverlay key={celebrationKey} onDone={clearCelebration} />
       ) : null}
       <View style={styles.bottomNav}>
-        <Pressable onPress={() => setScreen("home")} style={screen === "home" ? styles.navItemActive : styles.navItem}>
+        <Pressable
+          onPress={() => {
+            setScreen("home");
+            setArchivedQuestView(null);
+          }}
+          style={screen === "home" ? styles.navItemActive : styles.navItem}
+        >
           <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>
             {screen === "home" ? "▣" : "▢"}
           </Text>
           <Text style={screen === "home" ? styles.navTextActive : styles.navText}>Quest</Text>
         </Pressable>
         <Pressable
-          onPress={() => setScreen("trophies")}
+          onPress={() => {
+            setScreen("trophies");
+            setArchivedQuestView(null);
+          }}
           style={screen === "trophies" ? styles.navItemActive : styles.navItem}
         >
           <Text style={screen === "trophies" ? styles.navIconActive : styles.navIcon}>
@@ -886,6 +987,21 @@ function ReflectionText({ caption }: { caption: string }) {
       {remainingText ? ` ${remainingText}` : ""}
     </Text>
   );
+}
+
+function getEntryJourneyPair(entries: JournalEntry[]): JourneyState {
+  if (entries.length === 0) {
+    return { first: null, latest: null };
+  }
+
+  const sortedEntries = [...entries].sort(
+    (first, second) => new Date(first.timestamp).getTime() - new Date(second.timestamp).getTime()
+  );
+
+  return {
+    first: sortedEntries[0],
+    latest: sortedEntries[sortedEntries.length - 1],
+  };
 }
 
 function getMomentImageStyle(caption: string | null) {
@@ -1184,6 +1300,28 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 15,
     fontWeight: "800",
+  },
+  archiveBackButton: {
+    alignSelf: "flex-start",
+    backgroundColor: palette.panel,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  archiveBackText: {
+    color: palette.ink,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  archiveDetailArea: {
+    gap: 18,
+  },
+  archiveStepCount: {
+    color: palette.accentDark,
+    fontSize: 15,
+    fontWeight: "900",
   },
   secondaryDestructiveButton: {
     backgroundColor: palette.dangerSoft,
@@ -1513,6 +1651,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+  },
+  momentIconButtonPlaceholder: {
+    width: 44,
+    height: 44,
   },
   momentCloseButton: {
     width: 44,
