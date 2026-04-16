@@ -259,12 +259,11 @@ export default function App() {
 
     Alert.alert(
       "Complete quest?",
-      "This moves your current quest into the Trophy Room and clears the slate for the next one.",
+      "This will move it to your Trophy Room and make space for your next one.",
       [
         { text: "Keep going", style: "cancel" },
         {
-          text: "Complete Quest",
-          style: "destructive",
+          text: "Finish Quest",
           onPress: async () => {
             await completeQuest(activeQuest.id);
             await refreshData();
@@ -558,12 +557,16 @@ export default function App() {
                   <View style={styles.questTitleWrap}>
                     <Text style={styles.questTitle}>{activeQuest.title}</Text>
                     <Text style={styles.momentCount}>
-                      {entries.length} {entries.length === 1 ? "moment" : "moments"} captured so far
+                      {entries.length === 0
+                        ? `Take your first step as ${formatQuestIdentity(activeQuest.title)}`
+                        : `${entries.length} ${entries.length === 1 ? "step" : "steps"} into your quest`}
                     </Text>
                   </View>
                 </View>
                 <Pressable onPress={openCamera} style={styles.cameraButton} accessibilityLabel="Open camera">
-                  <Text style={styles.cameraButtonText}>Log Progress</Text>
+                  <Text style={styles.cameraButtonText}>
+                    {entries.length === 0 ? "Take Your First Step" : "Take Another Step"}
+                  </Text>
                 </Pressable>
               </View>
 
@@ -582,8 +585,8 @@ export default function App() {
                 <Text style={styles.sectionTitle}>Your Journey</Text>
                 {entries.length === 0 ? (
                   <View style={styles.emptyState}>
-                    <Text style={styles.emptyTitle}>No moments yet</Text>
-                    <Text style={styles.sectionText}>Your first photo will start the record.</Text>
+                    <Text style={styles.emptyTitle}>No steps yet</Text>
+                    <Text style={styles.sectionText}>Take your first step to begin.</Text>
                   </View>
                 ) : (
                   <View style={styles.momentSections}>
@@ -609,41 +612,41 @@ export default function App() {
               </View>
 
               <View style={styles.sectionCard}>
-                <Text style={styles.sectionTitle}>Quest Controls</Text>
+                <Text style={styles.sectionTitle}>Finish Your Quest</Text>
                 <Text style={styles.sectionText}>
-                  When the journey is complete, archive the quest and start fresh.
+                  When you’re ready, close this chapter and start a new one.
                 </Text>
                 <Pressable onPress={handleCompleteQuest} style={styles.secondaryDestructiveButton}>
-                  <Text style={styles.secondaryDestructiveText}>Complete Quest</Text>
+                  <Text style={styles.secondaryDestructiveText}>Finish Quest</Text>
                 </Pressable>
               </View>
             </>
           ) : (
             <View style={styles.onboardingCard}>
-              <Text style={styles.sectionTitle}>The Singular Commitment</Text>
+              <Text style={styles.sectionTitle}>Choose Your Quest</Text>
               <Text style={styles.sectionText}>
-                Choose one high-stakes identity to chase. Side Quest Slayer only allows one active quest at a time.
+                What do you want to work toward?
               </Text>
               <TextInput
                 value={questTitle}
                 onChangeText={setQuestTitle}
-                placeholder="College Graduate, Professional Dancer, Dream Job..."
+                placeholder="Actor, Dancer, Marathon Runner, Writer..."
                 placeholderTextColor="#8b6f6a"
                 style={styles.input}
               />
               <Pressable onPress={handleCreateQuest} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Commit To This Quest</Text>
+                <Text style={styles.primaryButtonText}>Start This Quest</Text>
               </Pressable>
             </View>
           )
         ) : (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>Trophy Room</Text>
-            <Text style={styles.sectionText}>Finished quests live here as proof of follow-through.</Text>
+            <Text style={styles.sectionText}>This is where your finished quests live.</Text>
             {archivedQuests.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No trophies yet</Text>
-                <Text style={styles.sectionText}>Complete a quest and it will appear here.</Text>
+                <Text style={styles.sectionText}>Finish a quest to earn your first one.</Text>
               </View>
             ) : (
               archivedQuests.map((quest) => (
@@ -705,7 +708,7 @@ function JourneyPanel({
         </Pressable>
       ) : (
         <View style={styles.bridgePlaceholder}>
-          <Text style={styles.placeholderText}>Waiting for a moment</Text>
+          <Text style={styles.placeholderText}>Your first step will show here</Text>
         </View>
       )}
     </View>
@@ -1020,6 +1023,17 @@ function getQuestEmoji(title: string) {
   }
 
   return "⚔️";
+}
+
+function formatQuestIdentity(title: string) {
+  const identity = title.trim().toLowerCase();
+
+  if (!identity) {
+    return "a quest";
+  }
+
+  const article = /^[aeiou]/.test(identity) ? "an" : "a";
+  return `${article} ${identity}`;
 }
 
 function formatDate(dateString: string | null) {
