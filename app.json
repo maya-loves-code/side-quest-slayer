@@ -29,15 +29,23 @@
       "bundleIdentifier": "com.sidequestslayer.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Side Quest Slayer uses your camera to capture daily proof of your progress.",
-        "NSPhotoLibraryUsageDescription": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll."
+        "NSPhotoLibraryUsageDescription": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "com.sidequestslayer.app",
       "permissions": [
-        "CAMERA",
-        "POST_NOTIFICATIONS"
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.RECORD_AUDIO"
       ]
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cb4c8ffe-5546-443b-90dc-a0f90ef20cb3"
+      }
+    },
+    "owner": "mbello498"
   }
 }
