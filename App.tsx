@@ -50,7 +50,13 @@ type JourneyState = {
 type ArchivedQuestView = {
   quest: Quest;
   entries: JournalEntry[];
+  firstEntry: JournalEntry | null;
+  latestEntry: JournalEntry | null;
+  durationLabel: string;
+  captionHighlights: string[];
 };
+
+type ArchivedQuestSummary = ArchivedQuestView;
 
 type MomentSection = {
   title: string;
@@ -59,6 +65,28 @@ type MomentSection = {
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const CAPTION_CHARACTER_LIMIT = 180;
+const REFLECTION_PROMPTS = [
+  "What felt easier today?",
+  "What are you proud of?",
+  "What did you try even though it was awkward?",
+  "What would future you want to remember?",
+  "What did you show up for today?",
+  "What changed, even a little?",
+  "What did you learn about yourself?",
+  "What part of this felt most alive?",
+  "What did you do that past you would admire?",
+  "What are you choosing to keep practicing?",
+  "What felt hard, but still worth it?",
+  "What small win deserves credit?",
+  "What surprised you about today?",
+  "What did you make possible by starting?",
+  "What would you tell yourself to remember?",
+  "What did courage look like today?",
+  "What are you building, one step at a time?",
+  "What felt more like you today?",
+  "What did you keep going through?",
+  "What deserves a tiny celebration?",
+];
 const TILE_SPARKLES = [
   { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
   { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.accentSoft },
@@ -79,10 +107,11 @@ export default function App() {
   const [questTitle, setQuestTitle] = useState("");
   const [activeQuest, setActiveQuest] = useState<Quest | null>(null);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [archivedQuests, setArchivedQuests] = useState<Quest[]>([]);
+  const [archivedQuests, setArchivedQuests] = useState<ArchivedQuestSummary[]>([]);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [captionDraft, setCaptionDraft] = useState("");
+  const [reflectionPromptIndex, setReflectionPromptIndex] = useState(0);
   const [pendingImportUri, setPendingImportUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
@@ -97,13 +126,10 @@ export default function App() {
   const [archivedQuestView, setArchivedQuestView] = useState<ArchivedQuestView | null>(null);
 
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
+  const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
   const archivedMomentSections = useMemo(
     () => createMomentSections(archivedQuestView?.entries ?? []),
-    [archivedQuestView?.entries]
-  );
-  const archivedJourneyPair = useMemo(
-    () => getEntryJourneyPair(archivedQuestView?.entries ?? []),
     [archivedQuestView?.entries]
   );
   const momentTileWidth = Math.floor((width - 46) / 2);
@@ -129,8 +155,12 @@ export default function App() {
   async function refreshData() {
     const quest = await getActiveQuest();
     const trophies = await getArchivedQuests();
+    const trophySummaries = await Promise.all(
+      trophies.map(async (trophy) => createArchivedQuestSummary(trophy, await getEntriesForQuest(trophy.id)))
+    );
+
     setActiveQuest(quest);
-    setArchivedQuests(trophies);
+    setArchivedQuests(trophySummaries);
 
     if (!quest) {
       setEntries([]);
@@ -300,6 +330,7 @@ export default function App() {
 
     setCameraFacing("back");
     setCaptionDraft("");
+    setReflectionPromptIndex((index) => (index + 1) % REFLECTION_PROMPTS.length);
     setCameraOpen(true);
   }
 
@@ -315,9 +346,9 @@ export default function App() {
     setSelectedMoment(moment);
   }
 
-  async function openArchivedQuest(quest: Quest) {
-    const questEntries = await getEntriesForQuest(quest.id);
-    setArchivedQuestView({ quest, entries: questEntries });
+  async function openArchivedQuest(summary: ArchivedQuestSummary) {
+    const questEntries = await getEntriesForQuest(summary.quest.id);
+    setArchivedQuestView(createArchivedQuestSummary(summary.quest, questEntries));
     setMomentMenuOpen(false);
     setSelectedMoment(null);
     setSelectedMomentReadOnly(false);
@@ -405,7 +436,7 @@ export default function App() {
                   <TextInput
                     value={captionDraft}
                     onChangeText={setCaptionDraft}
-                    placeholder="Write a little something to celebrate you..."
+                    placeholder={captionPlaceholder}
                     placeholderTextColor="rgba(255, 255, 255, 0.72)"
                     style={styles.cameraCaptionInput}
                     maxLength={CAPTION_CHARACTER_LIMIT}
@@ -446,7 +477,7 @@ export default function App() {
                   <TextInput
                     value={captionDraft}
                     onChangeText={setCaptionDraft}
-                    placeholder="Write a little something to celebrate you..."
+                    placeholder={captionPlaceholder}
                     placeholderTextColor="rgba(255, 255, 255, 0.72)"
                     style={styles.cameraCaptionInput}
                     maxLength={CAPTION_CHARACTER_LIMIT}
@@ -682,25 +713,41 @@ export default function App() {
               <Text style={styles.archiveBackText}>Back to Trophy Room</Text>
             </Pressable>
 
-            <View style={styles.sectionCard}>
-              <Text style={styles.sectionTitle}>
+            <View style={styles.recapHeroCard}>
+              <Text style={styles.recapEyebrow}>Quest Complete</Text>
+              <Text style={styles.recapTitle}>
                 {archivedQuestView.quest.emoji ?? getQuestEmoji(archivedQuestView.quest.title)} {archivedQuestView.quest.title}
               </Text>
-              <Text style={styles.sectionText}>
-                Started {formatDate(archivedQuestView.quest.startedAt)} • Finished {formatDate(archivedQuestView.quest.completedAt)}
-              </Text>
-              <Text style={styles.archiveStepCount}>
-                {archivedQuestView.entries.length} {archivedQuestView.entries.length === 1 ? "step" : "steps"} completed
-              </Text>
+              <Text style={styles.recapSubtitle}>You made this chapter real.</Text>
+              <View style={styles.recapStatsGrid}>
+                <RecapStat
+                  label="Steps"
+                  value={`${archivedQuestView.entries.length}`}
+                />
+                <RecapStat label="Started" value={formatDate(archivedQuestView.quest.startedAt)} />
+                <RecapStat label="Finished" value={formatDate(archivedQuestView.quest.completedAt)} />
+                <RecapStat label="Duration" value={archivedQuestView.durationLabel} />
+              </View>
             </View>
 
             <View style={styles.journeyCard}>
               <Text style={styles.sectionTitle}>From Then to Now</Text>
               <View style={styles.bridgeRow}>
-                <JourneyPanel label="First" entry={archivedJourneyPair.first} onPress={(entry) => openMoment(entry, true)} />
-                <JourneyPanel label="Latest" entry={archivedJourneyPair.latest} onPress={(entry) => openMoment(entry, true)} />
+                <JourneyPanel label="First Step" entry={archivedQuestView.firstEntry} onPress={(entry) => openMoment(entry, true)} />
+                <JourneyPanel label="Latest Step" entry={archivedQuestView.latestEntry} onPress={(entry) => openMoment(entry, true)} />
               </View>
             </View>
+
+            {archivedQuestView.captionHighlights.length > 0 ? (
+              <View style={styles.recapHighlightsCard}>
+                <Text style={styles.sectionTitle}>Reflection Highlights</Text>
+                {archivedQuestView.captionHighlights.map((highlight, index) => (
+                  <View key={`${highlight}-${index}`} style={styles.highlightItem}>
+                    <Text style={styles.highlightQuote}>{highlight}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
 
             <View style={styles.scrapbookArea}>
               <Text style={styles.sectionTitle}>Archived Journey</Text>
@@ -741,13 +788,12 @@ export default function App() {
                 <Text style={styles.sectionText}>Finish a quest to earn your first one.</Text>
               </View>
             ) : (
-              archivedQuests.map((quest) => (
-                <Pressable key={quest.id} onPress={() => openArchivedQuest(quest)} style={styles.trophyCard}>
-                  <Text style={styles.trophyTitle}>{quest.title}</Text>
-                  <Text style={styles.trophyMeta}>
-                    Started {formatDate(quest.startedAt)} • Completed {formatDate(quest.completedAt)}
-                  </Text>
-                </Pressable>
+              archivedQuests.map((questSummary) => (
+                <TrophyCard
+                  key={questSummary.quest.id}
+                  summary={questSummary}
+                  onPress={() => openArchivedQuest(questSummary)}
+                />
               ))
             )}
           </View>
@@ -812,6 +858,64 @@ function JourneyPanel({
           <Text style={styles.placeholderText}>Your first step will show here</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+function TrophyCard({ summary, onPress }: { summary: ArchivedQuestSummary; onPress: () => void }) {
+  const emoji = summary.quest.emoji ?? getQuestEmoji(summary.quest.title);
+  const stepLabel = `${summary.entries.length} ${summary.entries.length === 1 ? "step" : "steps"}`;
+
+  return (
+    <Pressable onPress={onPress} style={styles.trophyCard}>
+      <View style={styles.trophyHeader}>
+        <View style={styles.trophyEmojiBadge}>
+          <Text style={styles.trophyEmoji}>{emoji}</Text>
+        </View>
+        <View style={styles.trophyTitleWrap}>
+          <Text style={styles.trophyTitle}>{summary.quest.title}</Text>
+          <Text style={styles.trophyMeta}>Completed {formatDate(summary.quest.completedAt)}</Text>
+        </View>
+      </View>
+
+      {summary.firstEntry || summary.latestEntry ? (
+        <View style={styles.trophyPreviewRow}>
+          <TrophyPreview label="First" entry={summary.firstEntry} />
+          <TrophyPreview label="Latest" entry={summary.latestEntry} />
+        </View>
+      ) : (
+        <View style={styles.trophyEmptyPreview}>
+          <Text style={styles.trophyEmptyPreviewText}>No steps were logged for this quest.</Text>
+        </View>
+      )}
+
+      <View style={styles.trophyStatsRow}>
+        <Text style={styles.trophyStatText}>{stepLabel}</Text>
+        <Text style={styles.trophyStatDivider}>•</Text>
+        <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function TrophyPreview({ label, entry }: { label: string; entry: JournalEntry | null }) {
+  return (
+    <View style={styles.trophyPreview}>
+      {entry ? (
+        <Image source={{ uri: entry.imageUri }} style={styles.trophyPreviewImage} />
+      ) : (
+        <View style={styles.trophyPreviewPlaceholder} />
+      )}
+      <Text style={styles.trophyPreviewLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function RecapStat({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.recapStat}>
+      <Text style={styles.recapStatValue}>{value}</Text>
+      <Text style={styles.recapStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -1002,6 +1106,41 @@ function getEntryJourneyPair(entries: JournalEntry[]): JourneyState {
     first: sortedEntries[0],
     latest: sortedEntries[sortedEntries.length - 1],
   };
+}
+
+function createArchivedQuestSummary(quest: Quest, entries: JournalEntry[]): ArchivedQuestSummary {
+  const sortedEntries = [...entries].sort(
+    (first, second) => new Date(first.timestamp).getTime() - new Date(second.timestamp).getTime()
+  );
+
+  return {
+    quest,
+    entries,
+    firstEntry: sortedEntries[0] ?? null,
+    latestEntry: sortedEntries[sortedEntries.length - 1] ?? null,
+    durationLabel: getQuestDurationLabel(quest.startedAt, quest.completedAt),
+    captionHighlights: getCaptionHighlights(entries),
+  };
+}
+
+function getCaptionHighlights(entries: JournalEntry[]) {
+  return [...entries]
+    .sort((first, second) => new Date(second.timestamp).getTime() - new Date(first.timestamp).getTime())
+    .map((entry) => entry.caption?.trim() ?? "")
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((caption) => splitFirstSentence(caption).firstSentence);
+}
+
+function getQuestDurationLabel(startedAt: string, completedAt: string | null) {
+  const startedDate = new Date(startedAt);
+  const completedDate = completedAt ? new Date(completedAt) : new Date();
+  const durationInDays = Math.max(
+    1,
+    Math.ceil((startOfDay(completedDate).getTime() - startOfDay(startedDate).getTime()) / 86400000) + 1
+  );
+
+  return `${durationInDays} ${durationInDays === 1 ? "day" : "days"}`;
 }
 
 function getMomentImageStyle(caption: string | null) {
@@ -1318,10 +1457,85 @@ const styles = StyleSheet.create({
   archiveDetailArea: {
     gap: 18,
   },
-  archiveStepCount: {
-    color: palette.accentDark,
-    fontSize: 15,
+  recapHeroCard: {
+    backgroundColor: palette.accentDark,
+    borderRadius: 8,
+    padding: 20,
+    gap: 16,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.8,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 6,
+  },
+  recapEyebrow: {
+    color: "rgba(255, 255, 255, 0.72)",
+    fontSize: 12,
     fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0,
+  },
+  recapTitle: {
+    color: "#fff",
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: "900",
+  },
+  recapSubtitle: {
+    color: "rgba(255, 255, 255, 0.84)",
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: "700",
+  },
+  recapStatsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  recapStat: {
+    width: "47%",
+    minHeight: 78,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.13)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.18)",
+    padding: 12,
+    justifyContent: "space-between",
+  },
+  recapStatValue: {
+    color: "#fff",
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: "900",
+  },
+  recapStatLabel: {
+    color: "rgba(255, 255, 255, 0.68)",
+    fontSize: 12,
+    fontWeight: "900",
+  },
+  recapHighlightsCard: {
+    backgroundColor: palette.card,
+    borderRadius: 8,
+    padding: 18,
+    gap: 12,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.34,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  highlightItem: {
+    backgroundColor: palette.paper,
+    borderRadius: 8,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  highlightQuote: {
+    color: palette.ink,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "800",
   },
   secondaryDestructiveButton: {
     backgroundColor: palette.dangerSoft,
@@ -1355,13 +1569,34 @@ const styles = StyleSheet.create({
   trophyCard: {
     backgroundColor: palette.card,
     borderRadius: 8,
-    padding: 16,
-    marginTop: 10,
+    padding: 14,
+    marginTop: 12,
+    gap: 14,
     shadowColor: palette.shadow,
     shadowOpacity: 0.28,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 5 },
     elevation: 1,
+  },
+  trophyHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  trophyEmojiBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: palette.accentSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  trophyEmoji: {
+    fontSize: 28,
+  },
+  trophyTitleWrap: {
+    flex: 1,
+    gap: 4,
   },
   trophyTitle: {
     fontSize: 18,
@@ -1372,6 +1607,68 @@ const styles = StyleSheet.create({
     color: palette.muted,
     marginTop: 6,
     lineHeight: 20,
+  },
+  trophyPreviewRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  trophyPreview: {
+    flex: 1,
+    aspectRatio: 1.18,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: palette.panel,
+  },
+  trophyPreviewImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  trophyPreviewPlaceholder: {
+    flex: 1,
+    backgroundColor: palette.panel,
+  },
+  trophyPreviewLabel: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    backgroundColor: "rgba(40, 33, 48, 0.58)",
+    color: "#fff",
+    borderRadius: 6,
+    overflow: "hidden",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+  trophyEmptyPreview: {
+    borderRadius: 8,
+    backgroundColor: palette.panel,
+    padding: 14,
+    minHeight: 70,
+    justifyContent: "center",
+  },
+  trophyEmptyPreviewText: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  trophyStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  trophyStatText: {
+    color: palette.accentDark,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  trophyStatDivider: {
+    color: palette.muted,
+    fontSize: 14,
+    fontWeight: "900",
   },
   cameraScreen: {
     flex: 1,
