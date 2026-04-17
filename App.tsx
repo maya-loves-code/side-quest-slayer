@@ -112,6 +112,7 @@ export default function App() {
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [captionDraft, setCaptionDraft] = useState("");
   const [reflectionPromptIndex, setReflectionPromptIndex] = useState(0);
+  const [pendingCaptureUri, setPendingCaptureUri] = useState<string | null>(null);
   const [pendingImportUri, setPendingImportUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
@@ -127,6 +128,8 @@ export default function App() {
 
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
   const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
+  const pendingPreviewUri = pendingCaptureUri ?? pendingImportUri;
+  const isPendingCapture = Boolean(pendingCaptureUri);
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
   const archivedMomentSections = useMemo(
     () => createMomentSections(archivedQuestView?.entries ?? []),
@@ -190,7 +193,7 @@ export default function App() {
   }
 
   async function handleCapturePhoto() {
-    if (!cameraRef.current || !activeQuest || pendingImportUri || savingPhoto || importingPhoto) {
+    if (!cameraRef.current || !activeQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -202,19 +205,17 @@ export default function App() {
         return;
       }
 
-      const savedUri = await saveCapturedPhoto(photo.uri);
-      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
-      await finishMomentAdded();
+      setPendingCaptureUri(photo.uri);
     } catch (error) {
       console.error(error);
-      Alert.alert("Camera error", "That photo did not save. Try one more time.");
+      Alert.alert("Camera error", "That photo did not capture. Try one more time.");
     } finally {
       setSavingPhoto(false);
     }
   }
 
   async function handleImportPhoto() {
-    if (!activeQuest || savingPhoto || importingPhoto) {
+    if (!activeQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -248,6 +249,24 @@ export default function App() {
     }
   }
 
+  async function handleSaveCapturedPhoto() {
+    if (!activeQuest || !pendingCaptureUri || savingPhoto || importingPhoto) {
+      return;
+    }
+
+    try {
+      setSavingPhoto(true);
+      const savedUri = await saveCapturedPhoto(pendingCaptureUri);
+      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await finishMomentAdded();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Camera error", "That photo did not save. Try one more time.");
+    } finally {
+      setSavingPhoto(false);
+    }
+  }
+
   async function handleSaveImportedPhoto() {
     if (!activeQuest || !pendingImportUri || savingPhoto || importingPhoto) {
       return;
@@ -266,6 +285,10 @@ export default function App() {
     }
   }
 
+  function cancelPendingCapture() {
+    setPendingCaptureUri(null);
+  }
+
   function cancelPendingImport() {
     setPendingImportUri(null);
   }
@@ -281,6 +304,7 @@ export default function App() {
   async function finishMomentAdded() {
     setCameraOpen(false);
     setCaptionDraft("");
+    setPendingCaptureUri(null);
     setPendingImportUri(null);
     const questEntries = await refreshData();
     const newestMoment = questEntries[0];
@@ -330,6 +354,8 @@ export default function App() {
 
     setCameraFacing("back");
     setCaptionDraft("");
+    setPendingCaptureUri(null);
+    setPendingImportUri(null);
     setReflectionPromptIndex((index) => (index + 1) % REFLECTION_PROMPTS.length);
     setCameraOpen(true);
   }
@@ -337,6 +363,7 @@ export default function App() {
   function closeCamera() {
     setCameraOpen(false);
     setCaptionDraft("");
+    setPendingCaptureUri(null);
     setPendingImportUri(null);
   }
 
@@ -429,9 +456,9 @@ export default function App() {
                 <Text style={styles.cameraCloseText}>×</Text>
               </Pressable>
             </View>
-            {pendingImportUri ? (
+            {pendingPreviewUri ? (
               <View style={styles.importPreviewPanel}>
-                <Image source={{ uri: pendingImportUri }} style={styles.importPreviewImage} />
+                <Image source={{ uri: pendingPreviewUri }} style={styles.importPreviewImage} />
                 <View style={styles.cameraCaptionCard}>
                   <TextInput
                     value={captionDraft}
@@ -449,18 +476,22 @@ export default function App() {
                 </View>
                 <View style={styles.importPreviewActions}>
                   <Pressable
-                    onPress={cancelPendingImport}
+                    onPress={isPendingCapture ? cancelPendingCapture : cancelPendingImport}
                     style={savingPhoto ? styles.importSecondaryButtonDisabled : styles.importSecondaryButton}
                     disabled={savingPhoto}
+                    accessibilityLabel={isPendingCapture ? "Retake photo" : "Choose another photo"}
                   >
-                    <Text style={styles.importSecondaryButtonText}>Choose Again</Text>
+                    <Text style={styles.importSecondaryButtonText}>
+                      {isPendingCapture ? "Retake" : "Choose Again"}
+                    </Text>
                   </Pressable>
                   <Pressable
-                    onPress={handleSaveImportedPhoto}
+                    onPress={isPendingCapture ? handleSaveCapturedPhoto : handleSaveImportedPhoto}
                     style={savingPhoto ? styles.importPrimaryButtonDisabled : styles.importPrimaryButton}
                     disabled={savingPhoto}
+                    accessibilityLabel="Save moment"
                   >
-                    <Text style={styles.importPrimaryButtonText}>Save Upload</Text>
+                    <Text style={styles.importPrimaryButtonText}>Save Moment</Text>
                   </Pressable>
                 </View>
                 <View

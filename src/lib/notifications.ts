@@ -27,8 +27,7 @@ export async function scheduleDailyQuestReminder() {
     trigger: {
       hour: 20,
       minute: 0,
-      repeats: true,
-      type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
     },
   });
 
