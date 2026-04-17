@@ -129,6 +129,7 @@ export default function App() {
   const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
   const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
   const pendingPreviewUri = pendingCaptureUri ?? pendingImportUri;
+  const isPreviewingMoment = Boolean(pendingPreviewUri);
   const isPendingCapture = Boolean(pendingCaptureUri);
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
   const archivedMomentSections = useMemo(
@@ -438,11 +439,20 @@ export default function App() {
       <StatusBar style="dark" />
       <Modal animationType="slide" visible={cameraOpen} onRequestClose={closeCamera}>
         <View style={styles.cameraScreen}>
-          <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
+          {!isPreviewingMoment ? (
+            <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
+          ) : null}
+          {isPreviewingMoment ? (
+            <>
+              <View pointerEvents="none" style={styles.momentGradientBase} />
+              <View pointerEvents="none" style={styles.momentGradientTop} />
+              <View pointerEvents="none" style={styles.momentGradientBottom} />
+            </>
+          ) : null}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : "height"}
             keyboardVerticalOffset={0}
-            style={styles.cameraOverlay}
+            style={isPreviewingMoment ? styles.previewOverlay : styles.cameraOverlay}
           >
             <View style={styles.cameraHeader}>
               <Text style={styles.cameraQuestTitle}>
@@ -713,10 +723,10 @@ export default function App() {
               <View style={styles.sectionCard}>
                 <Text style={styles.sectionTitle}>Finish Your Quest</Text>
                 <Text style={styles.sectionText}>
-                  When you’re ready, close this chapter and start a new one.
+                  Ready to celebrate this chapter? Move it to your Trophy Room and start your next quest.
                 </Text>
-                <Pressable onPress={handleCompleteQuest} style={styles.secondaryDestructiveButton}>
-                  <Text style={styles.secondaryDestructiveText}>Finish Quest</Text>
+                <Pressable onPress={handleCompleteQuest} style={styles.finishQuestButton}>
+                  <Text style={styles.finishQuestButtonText}>Finish Quest</Text>
                 </Pressable>
               </View>
             </>
@@ -810,22 +820,26 @@ export default function App() {
             </View>
           </View>
         ) : (
-          <View style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>Trophy Room</Text>
-            <Text style={styles.sectionText}>This is where your finished quests live.</Text>
+          <View style={styles.trophyRoom}>
+            <View style={styles.trophyRoomHeader}>
+              <Text style={styles.trophyRoomTitle}>Trophy Room</Text>
+              <Text style={styles.trophyRoomText}>Finished quests, saved proof, and the little wins that became real.</Text>
+            </View>
             {archivedQuests.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No trophies yet</Text>
                 <Text style={styles.sectionText}>Finish a quest to earn your first one.</Text>
               </View>
             ) : (
-              archivedQuests.map((questSummary) => (
-                <TrophyCard
-                  key={questSummary.quest.id}
-                  summary={questSummary}
-                  onPress={() => openArchivedQuest(questSummary)}
-                />
-              ))
+              <View style={styles.trophyList}>
+                {archivedQuests.map((questSummary) => (
+                  <TrophyCard
+                    key={questSummary.quest.id}
+                    summary={questSummary}
+                    onPress={() => openArchivedQuest(questSummary)}
+                  />
+                ))}
+              </View>
             )}
           </View>
         )}
@@ -1581,6 +1595,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
+  finishQuestButton: {
+    backgroundColor: palette.accent,
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.accentDark,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.42,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  finishQuestButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "900",
+  },
   emptyState: {
     borderRadius: 8,
     padding: 18,
@@ -1597,17 +1629,49 @@ const styles = StyleSheet.create({
     color: palette.ink,
     marginBottom: 6,
   },
-  trophyCard: {
-    backgroundColor: palette.card,
+  trophyRoom: {
+    gap: 18,
+  },
+  trophyRoomHeader: {
+    backgroundColor: palette.accentDark,
     borderRadius: 8,
-    padding: 14,
-    marginTop: 12,
+    padding: 18,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.26)",
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.34,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  trophyRoomTitle: {
+    color: "#fff",
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: "900",
+  },
+  trophyRoomText: {
+    color: "rgba(255, 255, 255, 0.82)",
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "700",
+  },
+  trophyList: {
     gap: 14,
+  },
+  trophyCard: {
+    backgroundColor: palette.paper,
+    borderRadius: 8,
+    padding: 16,
+    gap: 16,
+    borderWidth: 1,
+    borderColor: palette.border,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.28,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 1,
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
   trophyHeader: {
     flexDirection: "row",
@@ -1619,6 +1683,8 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 8,
     backgroundColor: palette.accentSoft,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.24)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1649,6 +1715,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: "hidden",
     backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.14)",
   },
   trophyPreviewImage: {
     width: "100%",
@@ -1657,7 +1725,7 @@ const styles = StyleSheet.create({
   },
   trophyPreviewPlaceholder: {
     flex: 1,
-    backgroundColor: palette.panel,
+    backgroundColor: "#fff",
   },
   trophyPreviewLabel: {
     position: "absolute",
@@ -1674,10 +1742,12 @@ const styles = StyleSheet.create({
   },
   trophyEmptyPreview: {
     borderRadius: 8,
-    backgroundColor: palette.panel,
+    backgroundColor: "rgba(237, 227, 255, 0.42)",
     padding: 14,
     minHeight: 70,
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   trophyEmptyPreviewText: {
     color: palette.muted,
@@ -1692,9 +1762,14 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   trophyStatText: {
-    color: palette.accentDark,
+    color: palette.accent,
     fontSize: 14,
     fontWeight: "900",
+    backgroundColor: palette.accentSoft,
+    borderRadius: 8,
+    overflow: "hidden",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   trophyStatDivider: {
     color: palette.muted,
@@ -1712,6 +1787,14 @@ const styles = StyleSheet.create({
     paddingTop: 70,
     paddingBottom: 40,
     backgroundColor: "rgba(16, 8, 3, 0.24)",
+  },
+  previewOverlay: {
+    flex: 1,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 70,
+    paddingBottom: 40,
+    backgroundColor: "transparent",
   },
   cameraHeader: {
     flexDirection: "row",
@@ -1774,6 +1857,7 @@ const styles = StyleSheet.create({
     width: "100%",
     gap: 10,
     alignItems: "center",
+    justifyContent: "center",
   },
   importPreviewImage: {
     width: "100%",
