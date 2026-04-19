@@ -28,11 +28,13 @@ import {
   completeQuest,
   createQuest,
   deleteEntry,
-  getActiveQuest,
+  getActiveQuests,
   getArchivedQuests,
   getEntriesForQuest,
   getJourneyPair,
+  getLastOpenQuestId,
   initializeDatabase,
+  setLastOpenQuestId,
   updateQuestEmoji,
 } from "./src/lib/db";
 import { scheduleDailyQuestReminder } from "./src/lib/notifications";
@@ -105,9 +107,12 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const [questTitle, setQuestTitle] = useState("");
-  const [activeQuest, setActiveQuest] = useState<Quest | null>(null);
+  const [activeQuests, setActiveQuests] = useState<Quest[]>([]);
+  const [selectedQuest, setSelectedQuest] = useState<Quest | null>(null);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [archivedQuests, setArchivedQuests] = useState<ArchivedQuestSummary[]>([]);
+  const [questPickerOpen, setQuestPickerOpen] = useState(false);
+  const [newQuestFormOpen, setNewQuestFormOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [captionDraft, setCaptionDraft] = useState("");
@@ -126,7 +131,7 @@ export default function App() {
   const [journeyPair, setJourneyPair] = useState<JourneyState>({ first: null, latest: null });
   const [archivedQuestView, setArchivedQuestView] = useState<ArchivedQuestView | null>(null);
 
-  const activeEmoji = activeQuest?.emoji ?? getQuestEmoji(activeQuest?.title ?? "");
+  const activeEmoji = selectedQuest?.emoji ?? getQuestEmoji(selectedQuest?.title ?? "");
   const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
   const pendingPreviewUri = pendingCaptureUri ?? pendingImportUri;
   const isPreviewingMoment = Boolean(pendingPreviewUri);
@@ -156,29 +161,29 @@ export default function App() {
     }
   }
 
-  async function refreshData() {
-    const quest = await getActiveQuest();
+  async function refreshData(preferredQuestId?: number | null) {
+    const lastOpenQuestId = preferredQuestId !== undefined ? preferredQuestId : await getLastOpenQuestId();
+    const quests = await getActiveQuests();
+    const nextQuest = quests.find((quest) => quest.id === lastOpenQuestId) ?? quests[0] ?? null;
     const trophies = await getArchivedQuests();
     const trophySummaries = await Promise.all(
       trophies.map(async (trophy) => createArchivedQuestSummary(trophy, await getEntriesForQuest(trophy.id)))
     );
-
-    setActiveQuest(quest);
-    setArchivedQuests(trophySummaries);
-
-    if (!quest) {
-      setEntries([]);
-      setJourneyPair({ first: null, latest: null });
-      return [];
-    }
-
     const [questEntries, pair] = await Promise.all([
-      getEntriesForQuest(quest.id),
-      getJourneyPair(quest.id),
+      nextQuest ? getEntriesForQuest(nextQuest.id) : Promise.resolve([]),
+      nextQuest ? getJourneyPair(nextQuest.id) : Promise.resolve({ first: null, latest: null }),
     ]);
 
+    setActiveQuests(quests);
+    setSelectedQuest(nextQuest);
+    setArchivedQuests(trophySummaries);
     setEntries(questEntries);
     setJourneyPair(pair);
+
+    if (nextQuest && nextQuest.id !== lastOpenQuestId) {
+      await setLastOpenQuestId(nextQuest.id);
+    }
+
     return questEntries;
   }
 
@@ -188,13 +193,47 @@ export default function App() {
       return;
     }
 
-    await createQuest(questTitle, getQuestEmoji(questTitle));
+    const createdQuest = await createQuest(questTitle, getQuestEmoji(questTitle));
+
+    if (!createdQuest) {
+      Alert.alert("Quest error", "That quest did not start. Try one more time.");
+      return;
+    }
+
+    await setLastOpenQuestId(createdQuest.id);
     setQuestTitle("");
-    await refreshData();
+    setQuestPickerOpen(false);
+    setNewQuestFormOpen(false);
+    await refreshData(createdQuest.id);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
+  async function handleSelectQuest(questId: number) {
+    if (selectedQuest?.id === questId) {
+      closeQuestPicker();
+      return;
+    }
+
+    if (savingPhoto || importingPhoto) {
+      return;
+    }
+
+    closeQuestPicker();
+    setHighlightedMomentId(null);
+    setSelectedMoment(null);
+    setMomentMenuOpen(false);
+    await setLastOpenQuestId(questId);
+    await refreshData(questId);
+    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
+  function closeQuestPicker() {
+    setQuestPickerOpen(false);
+    setNewQuestFormOpen(false);
   }
 
   async function handleCapturePhoto() {
-    if (!cameraRef.current || !activeQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
+    if (!cameraRef.current || !selectedQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -216,7 +255,7 @@ export default function App() {
   }
 
   async function handleImportPhoto() {
-    if (!activeQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
+    if (!selectedQuest || pendingPreviewUri || savingPhoto || importingPhoto) {
       return;
     }
 
@@ -251,14 +290,14 @@ export default function App() {
   }
 
   async function handleSaveCapturedPhoto() {
-    if (!activeQuest || !pendingCaptureUri || savingPhoto || importingPhoto) {
+    if (!selectedQuest || !pendingCaptureUri || savingPhoto || importingPhoto) {
       return;
     }
 
     try {
       setSavingPhoto(true);
       const savedUri = await saveCapturedPhoto(pendingCaptureUri);
-      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -269,14 +308,14 @@ export default function App() {
   }
 
   async function handleSaveImportedPhoto() {
-    if (!activeQuest || !pendingImportUri || savingPhoto || importingPhoto) {
+    if (!selectedQuest || !pendingImportUri || savingPhoto || importingPhoto) {
       return;
     }
 
     try {
       setSavingPhoto(true);
       const savedUri = await saveImportedPhoto(pendingImportUri);
-      await addEntry(activeQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -323,20 +362,22 @@ export default function App() {
   }
 
   async function handleCompleteQuest() {
-    if (!activeQuest) {
+    if (!selectedQuest) {
       return;
     }
 
+    const questToComplete = selectedQuest;
+
     Alert.alert(
       "Complete quest?",
-      "This will move it to your Trophy Room and make space for your next one.",
+      "This will move it to your Trophy Room. Your other quests will stay active.",
       [
         { text: "Keep going", style: "cancel" },
         {
           text: "Finish Quest",
           onPress: async () => {
-            await completeQuest(activeQuest.id);
-            await refreshData();
+            await completeQuest(questToComplete.id);
+            await refreshData(questToComplete.id);
           },
         },
       ]
@@ -344,6 +385,10 @@ export default function App() {
   }
 
   async function openCamera() {
+    if (!selectedQuest) {
+      return;
+    }
+
     if (!permission?.granted) {
       const result = await requestPermission();
 
@@ -390,13 +435,13 @@ export default function App() {
   }
 
   async function handleEmojiSelect(emoji: string) {
-    if (!activeQuest) {
+    if (!selectedQuest) {
       return;
     }
 
-    await updateQuestEmoji(activeQuest.id, emoji);
+    await updateQuestEmoji(selectedQuest.id, emoji);
     setEmojiPickerOpen(false);
-    await refreshData();
+    await refreshData(selectedQuest.id);
   }
 
   async function handleDeleteSelectedMoment() {
@@ -456,7 +501,7 @@ export default function App() {
           >
             <View style={styles.cameraHeader}>
               <Text style={styles.cameraQuestTitle}>
-                {activeEmoji} {activeQuest?.title}
+                {activeEmoji} {selectedQuest?.title}
               </Text>
               <Pressable
                 onPress={closeCamera}
@@ -650,28 +695,103 @@ export default function App() {
         </View>
       </Modal>
 
+      <Modal animationType="slide" transparent visible={questPickerOpen} onRequestClose={closeQuestPicker}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={0}
+          style={styles.sheetBackdrop}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeQuestPicker} />
+          <View style={styles.questSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Choose Quest</Text>
+
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              style={styles.questSheetList}
+              contentContainerStyle={styles.questSheetListContent}
+            >
+              {activeQuests.map((quest) => {
+                const isSelected = quest.id === selectedQuest?.id;
+                const emoji = quest.emoji ?? getQuestEmoji(quest.title);
+
+                return (
+                  <Pressable
+                    key={quest.id}
+                    onPress={() => handleSelectQuest(quest.id)}
+                    style={isSelected ? styles.questSheetItemSelected : styles.questSheetItem}
+                    accessibilityLabel={`Open ${quest.title}`}
+                  >
+                    <Text style={styles.questSheetEmoji}>{emoji}</Text>
+                    <Text
+                      numberOfLines={1}
+                      style={isSelected ? styles.questSheetNameSelected : styles.questSheetName}
+                    >
+                      {quest.title}
+                    </Text>
+                    <Text style={styles.questSheetCheck}>{isSelected ? "✓" : ""}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {newQuestFormOpen ? (
+              <View style={styles.questSheetForm}>
+                <TextInput
+                  value={questTitle}
+                  onChangeText={setQuestTitle}
+                  placeholder="Actor, Dancer, Marathon Runner, Writer..."
+                  placeholderTextColor="#8b6f6a"
+                  style={styles.input}
+                />
+                <Pressable onPress={handleCreateQuest} style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>Start This Quest</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable onPress={() => setNewQuestFormOpen(true)} style={styles.questSheetNewButton}>
+                <Text style={styles.questSheetNewText}>+ New Quest</Text>
+              </Pressable>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
         <View style={styles.heroCard}>
           <Text style={styles.title}>Side Quest Slayer</Text>
         </View>
 
         {screen === "home" ? (
-          activeQuest ? (
+          selectedQuest ? (
             <>
+              <Pressable
+                onPress={() => setQuestPickerOpen(true)}
+                style={styles.currentQuestSelector}
+                hitSlop={{ top: 13, bottom: 13, left: 12, right: 12 }}
+                accessibilityLabel="Choose current quest"
+              >
+                <Text numberOfLines={1} style={styles.currentQuestSelectorText}>
+                  {activeEmoji} {selectedQuest.title}
+                </Text>
+                <Text style={styles.currentQuestSelectorChevron}>▼</Text>
+              </Pressable>
+
               <View style={styles.questCard}>
                 <View style={styles.questHeader}>
                   <Pressable onPress={() => setEmojiPickerOpen(true)} style={styles.questEmojiButton}>
                     <Text style={styles.questEmoji}>{activeEmoji}</Text>
                   </Pressable>
                   <View style={styles.questTitleWrap}>
-                    <Text style={styles.questTitle}>{activeQuest.title}</Text>
+                    <Text style={styles.questTitle}>{selectedQuest.title}</Text>
                     <Text style={styles.momentCount}>
                       {entries.length === 0
-                        ? `Take your first step as ${formatQuestIdentity(activeQuest.title)}`
+                        ? `Take your first step as ${formatQuestIdentity(selectedQuest.title)}`
                         : `${entries.length} ${entries.length === 1 ? "step" : "steps"} into your quest`}
                     </Text>
                   </View>
                 </View>
+
                 <Pressable onPress={openCamera} style={styles.cameraButton} accessibilityLabel="Open camera">
                   <Text style={styles.cameraButtonText}>
                     {entries.length === 0 ? "Take Your First Step" : "Take Another Step"}
@@ -723,7 +843,7 @@ export default function App() {
               <View style={styles.sectionCard}>
                 <Text style={styles.sectionTitle}>Finish Your Quest</Text>
                 <Text style={styles.sectionText}>
-                  Ready to celebrate this chapter? Move it to your Trophy Room and start your next quest.
+                  Ready to celebrate this chapter? Finish your quest and save it to your Trophy Room.
                 </Text>
                 <Pressable onPress={handleCompleteQuest} style={styles.finishQuestButton}>
                   <Text style={styles.finishQuestButtonText}>Finish Quest</Text>
@@ -823,7 +943,7 @@ export default function App() {
           <View style={styles.trophyRoom}>
             <View style={styles.trophyRoomHeader}>
               <Text style={styles.trophyRoomTitle}>Trophy Room</Text>
-              <Text style={styles.trophyRoomText}>Finished quests, saved proof, and the little wins that became real.</Text>
+              <Text style={styles.trophyRoomText}>Your finished quests. Tap any quest to relive the journey.</Text>
             </View>
             {archivedQuests.length === 0 ? (
               <View style={styles.emptyState}>
@@ -1440,6 +1560,127 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
+  },
+  currentQuestSelector: {
+    alignSelf: "flex-start",
+    maxWidth: "100%",
+    borderRadius: 8,
+    paddingHorizontal: 2,
+    paddingVertical: 1,
+    marginTop: -18,
+    marginBottom: -16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  currentQuestSelectorText: {
+    flexShrink: 1,
+    color: palette.ink,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "800",
+  },
+  currentQuestSelectorChevron: {
+    color: palette.muted,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: "800",
+  },
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: palette.backdrop,
+    justifyContent: "flex-end",
+  },
+  questSheet: {
+    backgroundColor: palette.card,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    padding: 18,
+    paddingBottom: 28,
+    gap: 14,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  sheetHandle: {
+    width: 42,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: palette.border,
+    alignSelf: "center",
+  },
+  sheetTitle: {
+    color: palette.ink,
+    fontSize: 20,
+    fontWeight: "900",
+  },
+  questSheetList: {
+    maxHeight: 320,
+  },
+  questSheetListContent: {
+    gap: 8,
+  },
+  questSheetItem: {
+    minHeight: 54,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  questSheetItemSelected: {
+    minHeight: 54,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: palette.accentSoft,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.28)",
+  },
+  questSheetEmoji: {
+    fontSize: 24,
+  },
+  questSheetName: {
+    flex: 1,
+    color: palette.ink,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  questSheetNameSelected: {
+    flex: 1,
+    color: palette.accent,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  questSheetCheck: {
+    width: 22,
+    color: palette.accent,
+    fontSize: 16,
+    fontWeight: "900",
+    textAlign: "right",
+  },
+  questSheetNewButton: {
+    minHeight: 52,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.24)",
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  questSheetNewText: {
+    color: palette.accent,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  questSheetForm: {
+    gap: 10,
   },
   sectionTitle: {
     fontSize: 22,

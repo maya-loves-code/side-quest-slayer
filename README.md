@@ -1,10 +1,10 @@
 # Side Quest Slayer
 
-Bare-bones V1 of a private, local-first progress journal for one active goal at a time.
+Bare-bones V1 of a private, local-first progress journal for multiple active quests.
 
 ## What is included
 
-- Singular quest onboarding
+- Multiple active quests with last-opened quest restore
 - Full-screen daily proof camera
 - Camera roll photo uploads from the capture flow
 - Local photo persistence to the device file system

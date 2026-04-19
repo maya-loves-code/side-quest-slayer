@@ -22,7 +22,7 @@ export async function scheduleDailyQuestReminder() {
   await Notifications.scheduleNotificationAsync({
     content: {
       title: "Side Quest Slayer",
-      body: "Did you work on your quest today?",
+      body: "Did you work on a quest today?",
     },
     trigger: {
       hour: 20,

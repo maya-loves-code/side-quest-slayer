@@ -3,6 +3,7 @@ import * as SQLite from "expo-sqlite";
 import type { JournalEntry, Quest } from "../types";
 
 const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
+const LAST_OPEN_QUEST_SETTING_KEY = "last_open_quest_id";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -37,6 +38,11 @@ export async function initializeDatabase() {
       is_milestone INTEGER NOT NULL DEFAULT 0,
       caption TEXT,
       FOREIGN KEY (quest_id) REFERENCES quests (id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key TEXT PRIMARY KEY,
+      setting_value TEXT NOT NULL
     );
   `);
 
@@ -77,11 +83,18 @@ function mapEntry(row: any): JournalEntry {
   };
 }
 
-export async function getActiveQuest() {
+export async function getActiveQuests() {
   const db = await getDatabase();
-  const row = await db.getFirstAsync<any>(
-    `SELECT * FROM quests WHERE status = 'active' ORDER BY started_at DESC LIMIT 1`
+  const rows = await db.getAllAsync<any>(
+    `SELECT * FROM quests WHERE status = 'active' ORDER BY started_at DESC, id DESC`
   );
+
+  return rows.map(mapQuest);
+}
+
+export async function getQuestById(questId: number) {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<any>(`SELECT * FROM quests WHERE id = ?`, questId);
 
   return row ? mapQuest(row) : null;
 }
@@ -99,15 +112,35 @@ export async function createQuest(title: string, emoji: string | null = null) {
   const db = await getDatabase();
   const startedAt = new Date().toISOString();
 
-  await db.withExclusiveTransactionAsync(async () => {
-    await db.runAsync(`UPDATE quests SET status = 'archived', completed_at = ? WHERE status = 'active'`, startedAt);
-    await db.runAsync(
-      `INSERT INTO quests (title, emoji, status, started_at) VALUES (?, ?, 'active', ?)`,
-      title.trim(),
-      emoji,
-      startedAt
-    );
-  });
+  const result = await db.runAsync(
+    `INSERT INTO quests (title, emoji, status, started_at) VALUES (?, ?, 'active', ?)`,
+    title.trim(),
+    emoji,
+    startedAt
+  );
+
+  return getQuestById(result.lastInsertRowId);
+}
+
+export async function getLastOpenQuestId() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ setting_value: string }>(
+    `SELECT setting_value FROM app_settings WHERE setting_key = ?`,
+    LAST_OPEN_QUEST_SETTING_KEY
+  );
+  const questId = Number(row?.setting_value);
+
+  return Number.isInteger(questId) && questId > 0 ? questId : null;
+}
+
+export async function setLastOpenQuestId(questId: number) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `INSERT OR REPLACE INTO app_settings (setting_key, setting_value) VALUES (?, ?)`,
+    LAST_OPEN_QUEST_SETTING_KEY,
+    String(questId)
+  );
 }
 
 export async function updateQuestEmoji(questId: number, emoji: string) {
