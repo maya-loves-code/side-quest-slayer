@@ -14,13 +14,15 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Side Quest Slayer uses your camera to capture daily proof of your progress."
+          "cameraPermission": "Side Quest Slayer uses your camera to capture daily proof of your progress.",
+          "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll."
+          "photosPermission": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll.",
+          "microphonePermission": false
         }
       ],
       "expo-sqlite"
@@ -38,8 +40,13 @@
       "package": "com.sidequestslayer.app",
       "permissions": [
         "android.permission.CAMERA",
-        "android.permission.POST_NOTIFICATIONS",
-        "android.permission.RECORD_AUDIO"
+        "android.permission.POST_NOTIFICATIONS"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
       ]
     },
     "extra": {

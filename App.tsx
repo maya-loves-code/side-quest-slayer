@@ -10,6 +10,7 @@ import {
   Easing,
   Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -67,6 +68,7 @@ type MomentSection = {
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const CAPTION_CHARACTER_LIMIT = 180;
+const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
 const REFLECTION_PROMPTS = [
   "What felt easier today?",
   "What are you proud of?",
@@ -411,6 +413,15 @@ export default function App() {
     setCaptionDraft("");
     setPendingCaptureUri(null);
     setPendingImportUri(null);
+  }
+
+  async function openPrivacyPolicy() {
+    try {
+      await Linking.openURL(PRIVACY_POLICY_URL);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Privacy Policy", `Open this link in your browser: ${PRIVACY_POLICY_URL}`);
+    }
   }
 
   function openMoment(moment: JournalEntry, isReadOnly = false) {
@@ -963,6 +974,14 @@ export default function App() {
             )}
           </View>
         )}
+        <View style={styles.privacyFooter}>
+          <Text style={styles.privacyFooterText}>
+            Side Quest Slayer stores your quest photos and reflections locally on this device.
+          </Text>
+          <Pressable onPress={openPrivacyPolicy} accessibilityRole="link" accessibilityLabel="Open privacy policy">
+            <Text style={styles.privacyFooterLink}>Privacy Policy</Text>
+          </Pressable>
+        </View>
       </ScrollView>
       {highlightedMomentId !== null && screen === "home" ? (
         <CelebrationOverlay key={celebrationKey} onDone={clearCelebration} />
@@ -1691,6 +1710,24 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 15,
     lineHeight: 22,
+  },
+  privacyFooter: {
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingTop: 4,
+  },
+  privacyFooterText: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  privacyFooterLink: {
+    color: palette.accent,
+    fontSize: 13,
+    fontWeight: "900",
+    textDecorationLine: "underline",
   },
   input: {
     backgroundColor: "#fff",
