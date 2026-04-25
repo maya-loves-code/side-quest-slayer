@@ -3,7 +3,9 @@ import * as SQLite from "expo-sqlite";
 import type { JournalEntry, Quest } from "../types";
 
 const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
+const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const LAST_OPEN_QUEST_SETTING_KEY = "last_open_quest_id";
+const DAILY_REMINDER_ENABLED_SETTING_KEY = "daily_reminder_enabled";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -20,6 +22,7 @@ export async function initializeDatabase() {
 
   await db.execAsync(`
     PRAGMA journal_mode = WAL;
+    PRAGMA foreign_keys = ON;
 
     CREATE TABLE IF NOT EXISTS quests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,10 +114,15 @@ export async function getArchivedQuests() {
 export async function createQuest(title: string, emoji: string | null = null) {
   const db = await getDatabase();
   const startedAt = new Date().toISOString();
+  const savedTitle = title.trim().slice(0, QUEST_TITLE_CHARACTER_LIMIT);
+
+  if (!savedTitle) {
+    throw new Error("Quest title is required.");
+  }
 
   const result = await db.runAsync(
     `INSERT INTO quests (title, emoji, status, started_at) VALUES (?, ?, 'active', ?)`,
-    title.trim(),
+    savedTitle,
     emoji,
     startedAt
   );
@@ -140,6 +148,26 @@ export async function setLastOpenQuestId(questId: number) {
     `INSERT OR REPLACE INTO app_settings (setting_key, setting_value) VALUES (?, ?)`,
     LAST_OPEN_QUEST_SETTING_KEY,
     String(questId)
+  );
+}
+
+export async function getDailyReminderEnabled() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ setting_value: string }>(
+    `SELECT setting_value FROM app_settings WHERE setting_key = ?`,
+    DAILY_REMINDER_ENABLED_SETTING_KEY
+  );
+
+  return row?.setting_value === "true";
+}
+
+export async function setDailyReminderEnabled(enabled: boolean) {
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `INSERT OR REPLACE INTO app_settings (setting_key, setting_value) VALUES (?, ?)`,
+    DAILY_REMINDER_ENABLED_SETTING_KEY,
+    String(enabled)
   );
 }
 

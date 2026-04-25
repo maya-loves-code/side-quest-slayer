@@ -18,10 +18,11 @@ Side Quest Slayer V1 is local-only:
 - No ads SDK.
 - No crash-reporting SDK.
 - No cloud sync or remote photo storage.
+- Android app data backup is disabled for local app storage.
 
 Camera and photo library access are used only when the user creates proof moments. Quest titles, captions/reflections, photo file locations, and copied proof photos stay in local app storage on the device.
 
-Daily reminders are local notifications. Do not describe them as push notifications unless remote push notification functionality is added later.
+Daily reminders are optional local notifications. Do not describe them as push notifications unless remote push notification functionality is added later.
 
 ## Permissions to Expect
 
@@ -40,6 +41,8 @@ Production Android builds should not include:
 - `android.permission.SYSTEM_ALERT_WINDOW`
 
 If any blocked permission appears in a release manifest or Play Console warning, inspect new dependencies or Expo plugins before submitting.
+
+Production Android builds should also keep `android:allowBackup="false"` because quest photos, captions, and SQLite data are intentionally local/private.
 
 ## Store Listing Language
 

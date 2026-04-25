@@ -33,3 +33,7 @@ export async function scheduleDailyQuestReminder() {
 
   return true;
 }
+
+export async function cancelDailyQuestReminder() {
+  await Notifications.cancelAllScheduledNotificationsAsync();
+}

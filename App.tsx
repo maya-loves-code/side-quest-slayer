@@ -17,6 +17,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   useWindowDimensions,
@@ -31,19 +32,21 @@ import {
   deleteEntry,
   getActiveQuests,
   getArchivedQuests,
+  getDailyReminderEnabled,
   getEntriesForQuest,
   getJourneyPair,
   getLastOpenQuestId,
   initializeDatabase,
+  setDailyReminderEnabled,
   setLastOpenQuestId,
   updateQuestEmoji,
 } from "./src/lib/db";
-import { scheduleDailyQuestReminder } from "./src/lib/notifications";
+import { cancelDailyQuestReminder, scheduleDailyQuestReminder } from "./src/lib/notifications";
 import { deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
 import type { JournalEntry, Quest } from "./src/types";
 
-type Screen = "home" | "trophies";
+type Screen = "home" | "trophies" | "settings";
 
 type JourneyState = {
   first: JournalEntry | null;
@@ -67,6 +70,7 @@ type MomentSection = {
 };
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
+const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 180;
 const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
 const REFLECTION_PROMPTS = [
@@ -123,6 +127,11 @@ export default function App() {
   const [pendingImportUri, setPendingImportUri] = useState<string | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
+  const [creatingQuest, setCreatingQuest] = useState(false);
+  const [completingQuest, setCompletingQuest] = useState(false);
+  const [deletingMoment, setDeletingMoment] = useState(false);
+  const [schedulingReminder, setSchedulingReminder] = useState(false);
+  const [dailyReminderEnabled, setDailyReminderEnabledState] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
   const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
@@ -153,7 +162,7 @@ export default function App() {
   async function bootstrapApp() {
     try {
       await initializeDatabase();
-      await scheduleDailyQuestReminder();
+      setDailyReminderEnabledState(await getDailyReminderEnabled());
       await refreshData();
     } catch (error) {
       console.error(error);
@@ -190,24 +199,38 @@ export default function App() {
   }
 
   async function handleCreateQuest() {
-    if (!questTitle.trim()) {
+    const trimmedTitle = questTitle.trim();
+
+    if (creatingQuest) {
+      return;
+    }
+
+    if (!trimmedTitle) {
       Alert.alert("Name your quest", "Give your goal a name before you commit.");
       return;
     }
 
-    const createdQuest = await createQuest(questTitle, getQuestEmoji(questTitle));
+    try {
+      setCreatingQuest(true);
+      const createdQuest = await createQuest(trimmedTitle, getQuestEmoji(trimmedTitle));
 
-    if (!createdQuest) {
+      if (!createdQuest) {
+        Alert.alert("Quest error", "That quest did not start. Try one more time.");
+        return;
+      }
+
+      await setLastOpenQuestId(createdQuest.id);
+      setQuestTitle("");
+      setQuestPickerOpen(false);
+      setNewQuestFormOpen(false);
+      await refreshData(createdQuest.id);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    } catch (error) {
+      console.error(error);
       Alert.alert("Quest error", "That quest did not start. Try one more time.");
-      return;
+    } finally {
+      setCreatingQuest(false);
     }
-
-    await setLastOpenQuestId(createdQuest.id);
-    setQuestTitle("");
-    setQuestPickerOpen(false);
-    setNewQuestFormOpen(false);
-    await refreshData(createdQuest.id);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   }
 
   async function handleSelectQuest(questId: number) {
@@ -298,8 +321,7 @@ export default function App() {
 
     try {
       setSavingPhoto(true);
-      const savedUri = await saveCapturedPhoto(pendingCaptureUri);
-      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await saveMoment(pendingCaptureUri, "capture");
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -316,8 +338,7 @@ export default function App() {
 
     try {
       setSavingPhoto(true);
-      const savedUri = await saveImportedPhoto(pendingImportUri);
-      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      await saveMoment(pendingImportUri, "import");
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -343,6 +364,25 @@ export default function App() {
     setCameraFacing((facing) => (facing === "back" ? "front" : "back"));
   }
 
+  async function saveMoment(sourceUri: string, source: "capture" | "import") {
+    if (!selectedQuest) {
+      return;
+    }
+
+    let savedUri: string | null = null;
+
+    try {
+      savedUri = source === "capture" ? await saveCapturedPhoto(sourceUri) : await saveImportedPhoto(sourceUri);
+      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+    } catch (error) {
+      if (savedUri) {
+        await deleteStoredPhoto(savedUri);
+      }
+
+      throw error;
+    }
+  }
+
   async function finishMomentAdded() {
     setCameraOpen(false);
     setCaptionDraft("");
@@ -364,7 +404,7 @@ export default function App() {
   }
 
   async function handleCompleteQuest() {
-    if (!selectedQuest) {
+    if (!selectedQuest || completingQuest) {
       return;
     }
 
@@ -378,8 +418,16 @@ export default function App() {
         {
           text: "Finish Quest",
           onPress: async () => {
-            await completeQuest(questToComplete.id);
-            await refreshData(questToComplete.id);
+            try {
+              setCompletingQuest(true);
+              await completeQuest(questToComplete.id);
+              await refreshData(questToComplete.id);
+            } catch (error) {
+              console.error(error);
+              Alert.alert("Quest error", "That quest did not finish. Try one more time.");
+            } finally {
+              setCompletingQuest(false);
+            }
           },
         },
       ]
@@ -417,10 +465,49 @@ export default function App() {
 
   async function openPrivacyPolicy() {
     try {
+      const canOpenPrivacyPolicy = await Linking.canOpenURL(PRIVACY_POLICY_URL);
+
+      if (!canOpenPrivacyPolicy) {
+        Alert.alert("Privacy Policy", `Open this link in your browser: ${PRIVACY_POLICY_URL}`);
+        return;
+      }
+
       await Linking.openURL(PRIVACY_POLICY_URL);
+    } catch {
+      Alert.alert("Privacy Policy", `Open this link in your browser: ${PRIVACY_POLICY_URL}`);
+    }
+  }
+
+  async function handleSetDailyReminder(nextEnabled: boolean) {
+    if (schedulingReminder) {
+      return;
+    }
+
+    try {
+      setSchedulingReminder(true);
+
+      if (!nextEnabled) {
+        await cancelDailyQuestReminder();
+        await setDailyReminderEnabled(false);
+        setDailyReminderEnabledState(false);
+        return;
+      }
+
+      const scheduled = await scheduleDailyQuestReminder();
+
+      if (scheduled) {
+        await setDailyReminderEnabled(true);
+        setDailyReminderEnabledState(true);
+      } else {
+        await setDailyReminderEnabled(false);
+        setDailyReminderEnabledState(false);
+        Alert.alert("Notifications off", "You can enable notifications in your device settings when you want reminders.");
+      }
     } catch (error) {
       console.error(error);
-      Alert.alert("Privacy Policy", `Open this link in your browser: ${PRIVACY_POLICY_URL}`);
+      Alert.alert("Reminder error", "That reminder did not schedule. Try one more time.");
+    } finally {
+      setSchedulingReminder(false);
     }
   }
 
@@ -456,16 +543,31 @@ export default function App() {
   }
 
   async function handleDeleteSelectedMoment() {
-    if (!selectedMoment) {
+    if (!selectedMoment || deletingMoment) {
       return;
     }
 
     const moment = selectedMoment;
-    setSelectedMoment(null);
-    setMomentMenuOpen(false);
-    await deleteEntry(moment.id);
-    await deleteStoredPhoto(moment.imageUri);
-    await refreshData();
+
+    try {
+      setDeletingMoment(true);
+      const photoDeleted = await deleteStoredPhoto(moment.imageUri);
+
+      if (!photoDeleted) {
+        Alert.alert("Delete error", "That moment photo could not be deleted, so the entry was kept safe.");
+        return;
+      }
+
+      setSelectedMoment(null);
+      setMomentMenuOpen(false);
+      await deleteEntry(moment.id);
+      await refreshData();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Delete error", "That moment could not be deleted. Try one more time.");
+    } finally {
+      setDeletingMoment(false);
+    }
   }
 
   async function handleDeleteSelectedMomentText() {
@@ -698,8 +800,12 @@ export default function App() {
                   <Text style={styles.deleteTextButtonText}>Delete text</Text>
                 </Pressable>
               ) : null}
-              <Pressable onPress={handleDeleteSelectedMoment} style={styles.deleteMomentButton}>
-                <Text style={styles.deleteMomentText}>Delete moment</Text>
+              <Pressable
+                onPress={handleDeleteSelectedMoment}
+                style={deletingMoment ? styles.deleteMomentButtonDisabled : styles.deleteMomentButton}
+                disabled={deletingMoment}
+              >
+                <Text style={styles.deleteMomentText}>{deletingMoment ? "Deleting..." : "Delete moment"}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -754,13 +860,23 @@ export default function App() {
                   placeholder="Actor, Dancer, Marathon Runner, Writer..."
                   placeholderTextColor="#8b6f6a"
                   style={styles.input}
+                  maxLength={QUEST_TITLE_CHARACTER_LIMIT}
+                  editable={!creatingQuest}
                 />
-                <Pressable onPress={handleCreateQuest} style={styles.primaryButton}>
-                  <Text style={styles.primaryButtonText}>Start This Quest</Text>
+                <Pressable
+                  onPress={handleCreateQuest}
+                  style={creatingQuest ? styles.primaryButtonDisabled : styles.primaryButton}
+                  disabled={creatingQuest}
+                >
+                  <Text style={styles.primaryButtonText}>{creatingQuest ? "Starting..." : "Start This Quest"}</Text>
                 </Pressable>
               </View>
             ) : (
-              <Pressable onPress={() => setNewQuestFormOpen(true)} style={styles.questSheetNewButton}>
+              <Pressable
+                onPress={() => setNewQuestFormOpen(true)}
+                style={creatingQuest ? styles.questSheetNewButtonDisabled : styles.questSheetNewButton}
+                disabled={creatingQuest}
+              >
                 <Text style={styles.questSheetNewText}>+ New Quest</Text>
               </Pressable>
             )}
@@ -856,8 +972,12 @@ export default function App() {
                 <Text style={styles.sectionText}>
                   Ready to celebrate this chapter? Finish your quest and save it to your Trophy Room.
                 </Text>
-                <Pressable onPress={handleCompleteQuest} style={styles.finishQuestButton}>
-                  <Text style={styles.finishQuestButtonText}>Finish Quest</Text>
+                <Pressable
+                  onPress={handleCompleteQuest}
+                  style={completingQuest ? styles.finishQuestButtonDisabled : styles.finishQuestButton}
+                  disabled={completingQuest}
+                >
+                  <Text style={styles.finishQuestButtonText}>{completingQuest ? "Finishing..." : "Finish Quest"}</Text>
                 </Pressable>
               </View>
             </>
@@ -873,13 +993,19 @@ export default function App() {
                 placeholder="Actor, Dancer, Marathon Runner, Writer..."
                 placeholderTextColor="#8b6f6a"
                 style={styles.input}
+                maxLength={QUEST_TITLE_CHARACTER_LIMIT}
+                editable={!creatingQuest}
               />
-              <Pressable onPress={handleCreateQuest} style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Start This Quest</Text>
+              <Pressable
+                onPress={handleCreateQuest}
+                style={creatingQuest ? styles.primaryButtonDisabled : styles.primaryButton}
+                disabled={creatingQuest}
+              >
+                <Text style={styles.primaryButtonText}>{creatingQuest ? "Starting..." : "Start This Quest"}</Text>
               </Pressable>
             </View>
           )
-        ) : archivedQuestView ? (
+        ) : screen === "trophies" && archivedQuestView ? (
           <View style={styles.archiveDetailArea}>
             <Pressable onPress={closeArchivedQuest} style={styles.archiveBackButton}>
               <Text style={styles.archiveBackText}>Back to Trophy Room</Text>
@@ -950,7 +1076,7 @@ export default function App() {
               )}
             </View>
           </View>
-        ) : (
+        ) : screen === "trophies" ? (
           <View style={styles.trophyRoom}>
             <View style={styles.trophyRoomHeader}>
               <Text style={styles.trophyRoomTitle}>Trophy Room</Text>
@@ -973,15 +1099,59 @@ export default function App() {
               </View>
             )}
           </View>
+        ) : (
+          <View style={styles.settingsScreen}>
+            <View style={styles.settingsHeader}>
+              <Text style={styles.settingsTitle}>Settings</Text>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Pressable
+                onPress={() => handleSetDailyReminder(!dailyReminderEnabled)}
+                style={styles.settingsControlRow}
+                disabled={schedulingReminder}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: dailyReminderEnabled, disabled: schedulingReminder }}
+                accessibilityLabel="Daily Reminder"
+              >
+                <View style={styles.settingsRowText}>
+                  <Text style={styles.settingsRowTitle}>Daily Reminder</Text>
+                  <Text style={styles.settingsRowSubtext}>Get a quiet nudge each evening</Text>
+                </View>
+                <Switch
+                  value={dailyReminderEnabled}
+                  disabled={schedulingReminder}
+                  pointerEvents="none"
+                  trackColor={{ false: "rgba(107, 97, 120, 0.22)", true: palette.accentSoft }}
+                  thumbColor={dailyReminderEnabled ? palette.accent : "#fff"}
+                  ios_backgroundColor="rgba(107, 97, 120, 0.22)"
+                />
+              </Pressable>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>Privacy</Text>
+              <Text style={styles.settingsText}>
+                Your quest photos and reflections are stored only on this device.
+              </Text>
+              <Pressable
+                onPress={openPrivacyPolicy}
+                style={styles.settingsLinkRow}
+                accessibilityRole="link"
+                accessibilityLabel="Open privacy policy"
+              >
+                <Text style={styles.settingsRowTitle}>Privacy Policy</Text>
+                <Text style={styles.settingsRowArrow}>›</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>App Info</Text>
+              <Text style={styles.settingsText}>Version 1.0.0</Text>
+              <Text style={styles.settingsText}>Local-first progress journal</Text>
+            </View>
+          </View>
         )}
-        <View style={styles.privacyFooter}>
-          <Text style={styles.privacyFooterText}>
-            Side Quest Slayer stores your quest photos and reflections locally on this device.
-          </Text>
-          <Pressable onPress={openPrivacyPolicy} accessibilityRole="link" accessibilityLabel="Open privacy policy">
-            <Text style={styles.privacyFooterLink}>Privacy Policy</Text>
-          </Pressable>
-        </View>
       </ScrollView>
       {highlightedMomentId !== null && screen === "home" ? (
         <CelebrationOverlay key={celebrationKey} onDone={clearCelebration} />
@@ -1010,6 +1180,18 @@ export default function App() {
             {screen === "trophies" ? "★" : "☆"}
           </Text>
           <Text style={screen === "trophies" ? styles.navTextActive : styles.navText}>Trophy Room</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setScreen("settings");
+            setArchivedQuestView(null);
+          }}
+          style={screen === "settings" ? styles.navItemActive : styles.navItem}
+        >
+          <Text style={screen === "settings" ? styles.navIconActive : styles.navIcon}>
+            {screen === "settings" ? "●" : "○"}
+          </Text>
+          <Text style={screen === "settings" ? styles.navTextActive : styles.navText}>Settings</Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -1693,6 +1875,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  questSheetNewButtonDisabled: {
+    minHeight: 52,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.panel,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.62,
+  },
   questSheetNewText: {
     color: palette.accent,
     fontSize: 15,
@@ -1711,23 +1903,72 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
-  privacyFooter: {
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
+  settingsScreen: {
+    gap: 22,
+  },
+  settingsHeader: {
+    paddingHorizontal: 2,
     paddingTop: 4,
   },
-  privacyFooterText: {
-    color: palette.muted,
-    fontSize: 12,
-    lineHeight: 17,
-    textAlign: "center",
-  },
-  privacyFooterLink: {
-    color: palette.accent,
-    fontSize: 13,
+  settingsTitle: {
+    color: palette.ink,
+    fontSize: 28,
     fontWeight: "900",
-    textDecorationLine: "underline",
+  },
+  settingsSection: {
+    backgroundColor: "#fbf8ff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: 16,
+    gap: 12,
+  },
+  settingsSectionTitle: {
+    color: palette.ink,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  settingsText: {
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  settingsControlRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+  },
+  settingsLinkRow: {
+    minHeight: 48,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: 12,
+  },
+  settingsRowText: {
+    flex: 1,
+    gap: 3,
+  },
+  settingsRowTitle: {
+    color: palette.ink,
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  settingsRowSubtext: {
+    color: palette.muted,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  settingsRowArrow: {
+    color: palette.muted,
+    fontSize: 24,
+    fontWeight: "600",
+    lineHeight: 26,
   },
   input: {
     backgroundColor: "#fff",
@@ -1744,6 +1985,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingVertical: 16,
     alignItems: "center",
+  },
+  primaryButtonDisabled: {
+    backgroundColor: palette.accentDark,
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    opacity: 0.62,
   },
   primaryButtonText: {
     color: "#fff",
@@ -1885,6 +2133,15 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 4,
+  },
+  finishQuestButtonDisabled: {
+    backgroundColor: palette.accentDark,
+    borderRadius: 8,
+    paddingVertical: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: palette.accentDark,
+    opacity: 0.62,
   },
   finishQuestButtonText: {
     color: "#fff",
@@ -2446,6 +2703,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
+  },
+  deleteMomentButtonDisabled: {
+    backgroundColor: palette.dangerSoft,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    opacity: 0.62,
   },
   deleteMomentText: {
     color: palette.danger,

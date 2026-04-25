@@ -13,6 +13,7 @@ Bare-bones V1 of a private, local-first progress journal for multiple active que
 - Inline "Your journey so far" comparison for first vs latest photo
 - Trophy Room for archived quests
 - Daily local reminder notification
+- Reminder permission is requested only after the user opts in
 
 ## Stack
 
@@ -37,6 +38,7 @@ Open in the Expo Go app or run on an iOS/Android simulator.
 
 - All data is local-only for V1.
 - Photos are copied into the app's internal document directory.
+- Android app data backup is disabled for private local quest storage.
 - The first journal image is marked as the milestone anchor in SQLite to support future montage or milestone features.
 - The app's brand palette is purple and is defined in `src/theme/colors.ts`.
 

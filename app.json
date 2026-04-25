@@ -38,6 +38,7 @@
     },
     "android": {
       "package": "com.sidequestslayer.app",
+      "allowBackup": false,
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.POST_NOTIFICATIONS"
