@@ -134,24 +134,26 @@ export async function createQuest(title: string, emoji: string | null = null) {
   return getQuestById(result.lastInsertRowId);
 }
 
-export async function createDemoQuest({
-  title,
-  emoji,
-  status,
-  startedAt,
-  completedAt = null,
-}: {
+type DemoQuestInput = {
   title: string;
   emoji: string | null;
-  status: "active" | "archived";
   startedAt: string;
-  completedAt?: string | null;
-}) {
+} & ({ status: "active"; completedAt?: null } | { status: "archived"; completedAt: string });
+
+export async function createDemoQuest({ title, emoji, status, startedAt, completedAt = null }: DemoQuestInput) {
   const db = await getDatabase();
   const savedTitle = title.trim().slice(0, QUEST_TITLE_CHARACTER_LIMIT);
 
   if (!savedTitle) {
     throw new Error("Quest title is required.");
+  }
+
+  if (status === "archived" && !completedAt) {
+    throw new Error("Archived demo quests require a completed date.");
+  }
+
+  if (status === "active" && completedAt) {
+    throw new Error("Active demo quests cannot have a completed date.");
   }
 
   const result = await db.runAsync(

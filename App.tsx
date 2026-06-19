@@ -95,6 +95,13 @@ type DemoEntrySeed = {
   isMilestone?: number;
 };
 
+type DemoQuestSeed = {
+  title: string;
+  emoji: string;
+  startedAt: string;
+  entries: DemoEntrySeed[];
+} & ({ status: "active"; completedAt?: null } | { status: "archived"; completedAt: string });
+
 type FooterIconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
 const WRITER_DEMO_ENTRIES: DemoEntrySeed[] = [
@@ -331,6 +338,7 @@ export default function App() {
     entries.length === 0
       ? "Start your journey with your first step."
       : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
+  const localDataOperationInProgress = deletingAllData || generatingDemoData;
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -837,7 +845,7 @@ export default function App() {
   }
 
   function confirmDeleteAllData() {
-    if (deletingAllData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -856,7 +864,7 @@ export default function App() {
   }
 
   async function handleDeleteAllData() {
-    if (deletingAllData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -901,7 +909,7 @@ export default function App() {
   }
 
   function confirmGenerateDemoData() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -919,7 +927,7 @@ export default function App() {
   }
 
   function confirmGenerateCompletedQuest() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -937,7 +945,7 @@ export default function App() {
   }
 
   function confirmClearDemoData() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -956,7 +964,7 @@ export default function App() {
   }
 
   async function handleGenerateDemoData() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -966,6 +974,7 @@ export default function App() {
       await cancelDailyQuestReminder();
       await deleteAllStoredPhotos();
       await deleteAllAppData();
+      resetAppStateAfterLocalDataClear();
 
       const writerQuest = await createDemoQuestFromSeeds({
         title: "Writer",
@@ -977,10 +986,6 @@ export default function App() {
       });
 
       await setLastOpenQuestId(writerQuest.id);
-      setScreen("home");
-      setDailyReminderEnabledState(false);
-      setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
-      setArchivedQuestView(null);
       await refreshData(writerQuest.id);
     } catch (error) {
       console.error(error);
@@ -991,7 +996,7 @@ export default function App() {
   }
 
   async function handleGenerateCompletedQuest() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -1018,7 +1023,7 @@ export default function App() {
   }
 
   async function handleClearDemoData() {
-    if (generatingDemoData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -1037,28 +1042,14 @@ export default function App() {
     }
   }
 
-  async function createDemoQuestFromSeeds({
-    title,
-    emoji,
-    status,
-    startedAt,
-    completedAt,
-    entries: demoEntries,
-  }: {
-    title: string;
-    emoji: string;
-    status: "active" | "archived";
-    startedAt: string;
-    completedAt: string | null;
-    entries: DemoEntrySeed[];
-  }) {
-    const quest = await createDemoQuest({ title, emoji, status, startedAt, completedAt });
+  async function createDemoQuestFromSeeds(seed: DemoQuestSeed) {
+    const quest = await createDemoQuest(seed);
 
     if (!quest) {
       throw new Error("Demo quest could not be created.");
     }
 
-    for (const entry of demoEntries) {
+    for (const entry of seed.entries) {
       const source = Image.resolveAssetSource(entry.imageSource);
 
       if (!source?.uri) {
@@ -1782,10 +1773,10 @@ export default function App() {
                 </Text>
                 <Pressable
                   onPress={confirmGenerateDemoData}
-                  style={generatingDemoData ? styles.demoButtonDisabled : styles.demoButton}
-                  disabled={generatingDemoData}
+                  style={localDataOperationInProgress ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={localDataOperationInProgress}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
                   accessibilityLabel="Generate Demo Data"
                 >
                   <Text style={styles.demoButtonText}>
@@ -1794,20 +1785,20 @@ export default function App() {
                 </Pressable>
                 <Pressable
                   onPress={confirmGenerateCompletedQuest}
-                  style={generatingDemoData ? styles.demoButtonDisabled : styles.demoButton}
-                  disabled={generatingDemoData}
+                  style={localDataOperationInProgress ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={localDataOperationInProgress}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
                   accessibilityLabel="Generate Completed Quest"
                 >
                   <Text style={styles.demoButtonText}>Generate Completed Quest</Text>
                 </Pressable>
                 <Pressable
                   onPress={confirmClearDemoData}
-                  style={generatingDemoData ? styles.demoDangerButtonDisabled : styles.demoDangerButton}
-                  disabled={generatingDemoData}
+                  style={localDataOperationInProgress ? styles.demoDangerButtonDisabled : styles.demoDangerButton}
+                  disabled={localDataOperationInProgress}
                   accessibilityRole="button"
-                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
                   accessibilityLabel="Clear Demo Data"
                 >
                   <Text style={styles.demoDangerButtonText}>Clear Demo Data</Text>
@@ -1823,10 +1814,10 @@ export default function App() {
               </Text>
               <Pressable
                 onPress={confirmDeleteAllData}
-                style={deletingAllData ? styles.dangerButtonDisabled : styles.dangerButton}
-                disabled={deletingAllData}
+                style={localDataOperationInProgress ? styles.dangerButtonDisabled : styles.dangerButton}
+                disabled={localDataOperationInProgress}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: deletingAllData }}
+                accessibilityState={{ disabled: localDataOperationInProgress }}
                 accessibilityLabel="Delete All Data"
               >
                 <Text style={styles.dangerButtonText}>{deletingAllData ? "Deleting..." : "Delete All Data"}</Text>
