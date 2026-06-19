@@ -1,4 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
@@ -28,6 +30,7 @@ import {
 } from "react-native";
 
 import {
+  DEFAULT_DAILY_REMINDER_TIME,
   addEntry,
   clearEntryCaption,
   completeQuest,
@@ -36,11 +39,13 @@ import {
   getActiveQuests,
   getArchivedQuests,
   getDailyReminderEnabled,
+  getDailyReminderTime,
   getEntriesForQuest,
   getJourneyPair,
   getLastOpenQuestId,
   initializeDatabase,
   setDailyReminderEnabled,
+  setDailyReminderTime,
   setLastOpenQuestId,
   updateQuestEmoji,
 } from "./src/lib/db";
@@ -138,6 +143,9 @@ export default function App() {
   const [deletingMoment, setDeletingMoment] = useState(false);
   const [schedulingReminder, setSchedulingReminder] = useState(false);
   const [dailyReminderEnabled, setDailyReminderEnabledState] = useState(false);
+  const [dailyReminderTime, setDailyReminderTimeState] = useState(DEFAULT_DAILY_REMINDER_TIME);
+  const [reminderTimeDraft, setReminderTimeDraft] = useState<string | null>(null);
+  const [reminderTimePickerOpen, setReminderTimePickerOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
   const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
@@ -159,6 +167,9 @@ export default function App() {
     [archivedQuestView?.entries]
   );
   const momentTileWidth = Math.min(Math.floor((width - 96) / 2), 148);
+  const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
+  const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
+  const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -168,7 +179,12 @@ export default function App() {
   async function bootstrapApp() {
     try {
       await initializeDatabase();
-      setDailyReminderEnabledState(await getDailyReminderEnabled());
+      const [reminderEnabled, reminderTime] = await Promise.all([
+        getDailyReminderEnabled(),
+        getDailyReminderTime(),
+      ]);
+      setDailyReminderEnabledState(reminderEnabled);
+      setDailyReminderTimeState(reminderTime);
       await refreshData();
     } catch (error) {
       console.error(error);
@@ -493,13 +509,14 @@ export default function App() {
       setSchedulingReminder(true);
 
       if (!nextEnabled) {
+        closeReminderTimePicker();
         await cancelDailyQuestReminder();
         await setDailyReminderEnabled(false);
         setDailyReminderEnabledState(false);
         return;
       }
 
-      const scheduled = await scheduleDailyQuestReminder();
+      const scheduled = await scheduleDailyQuestReminder(parseReminderTime(dailyReminderTime));
 
       if (scheduled) {
         await setDailyReminderEnabled(true);
@@ -515,6 +532,82 @@ export default function App() {
     } finally {
       setSchedulingReminder(false);
     }
+  }
+
+  async function handleReminderTimeChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (Platform.OS === "android") {
+      setReminderTimePickerOpen(false);
+    }
+
+    if (event.type === "dismissed") {
+      closeReminderTimePicker();
+      return;
+    }
+
+    if (!selectedDate || schedulingReminder) {
+      return;
+    }
+
+    const nextTime = createReminderTimeString(selectedDate);
+
+    if (Platform.OS === "ios") {
+      setReminderTimeDraft(nextTime);
+      return;
+    }
+
+    if (nextTime === dailyReminderTime) {
+      closeReminderTimePicker();
+      return;
+    }
+
+    await persistReminderTime(nextTime, dailyReminderEnabled);
+    setReminderTimeDraft(null);
+  }
+
+  async function persistReminderTime(nextTime: string, reminderEnabled: boolean) {
+    try {
+      setSchedulingReminder(true);
+      await setDailyReminderTime(nextTime);
+      setDailyReminderTimeState(nextTime);
+
+      if (!reminderEnabled) {
+        return;
+      }
+
+      const scheduled = await scheduleDailyQuestReminder(parseReminderTime(nextTime));
+
+      if (!scheduled) {
+        await setDailyReminderEnabled(false);
+        setDailyReminderEnabledState(false);
+        Alert.alert("Notifications off", "You can enable notifications in your device settings when you want reminders.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Reminder error", "That reminder time did not save. Try one more time.");
+    } finally {
+      setSchedulingReminder(false);
+    }
+  }
+
+  function openReminderTimePicker() {
+    setReminderTimeDraft(dailyReminderTime);
+    setReminderTimePickerOpen(true);
+  }
+
+  function closeReminderTimePicker() {
+    setReminderTimePickerOpen(false);
+    setReminderTimeDraft(null);
+  }
+
+  async function handleReminderTimeDone() {
+    const nextTime = reminderTimeDraft ?? dailyReminderTime;
+    closeReminderTimePicker();
+
+    if (nextTime === dailyReminderTime) {
+      return;
+    }
+
+    await persistReminderTime(nextTime, dailyReminderEnabled);
   }
 
   function openMoment(moment: JournalEntry, isReadOnly = false) {
@@ -1143,7 +1236,7 @@ export default function App() {
               >
                 <View style={styles.settingsRowText}>
                   <Text style={styles.settingsRowTitle}>Daily Reminder</Text>
-                  <Text style={styles.settingsRowSubtext}>Get a quiet nudge each evening</Text>
+                  <Text style={styles.settingsRowSubtext}>A reminder to capture today’s progress.</Text>
                 </View>
                 <Switch
                   value={dailyReminderEnabled}
@@ -1154,6 +1247,59 @@ export default function App() {
                   ios_backgroundColor="rgba(107, 97, 120, 0.22)"
                 />
               </Pressable>
+              {dailyReminderEnabled ? (
+                <>
+                  <Pressable
+                    onPress={openReminderTimePicker}
+                    style={schedulingReminder ? styles.settingsTimeRowDisabled : styles.settingsTimeRow}
+                    disabled={schedulingReminder}
+                    accessibilityRole="button"
+                    accessibilityState={{ disabled: schedulingReminder }}
+                    accessibilityLabel={`Reminder Time, ${dailyReminderTimeLabel}`}
+                  >
+                    <Text style={styles.settingsRowTitle}>Reminder Time</Text>
+                    <View style={styles.settingsTimeValueWrap}>
+                      <Text style={styles.settingsTimeValue}>{dailyReminderTimeLabel}</Text>
+                      <Text style={styles.settingsRowArrow}>›</Text>
+                    </View>
+                  </Pressable>
+                  {reminderTimePickerOpen ? (
+                    <View style={styles.settingsTimePickerWrap}>
+                      <DateTimePicker
+                        value={dailyReminderPickerValue}
+                        mode="time"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={handleReminderTimeChange}
+                        disabled={schedulingReminder}
+                      />
+                      {Platform.OS === "ios" ? (
+                        <View style={styles.settingsTimePickerActions}>
+                          <Pressable
+                            onPress={closeReminderTimePicker}
+                            style={styles.secondaryButton}
+                            disabled={schedulingReminder}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: schedulingReminder }}
+                            accessibilityLabel="Cancel reminder time"
+                          >
+                            <Text style={styles.secondaryButtonText}>Cancel</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => void handleReminderTimeDone()}
+                            style={schedulingReminder ? styles.primaryButtonDisabled : styles.primaryButton}
+                            disabled={schedulingReminder}
+                            accessibilityRole="button"
+                            accessibilityState={{ disabled: schedulingReminder }}
+                            accessibilityLabel="Save reminder time"
+                          >
+                            <Text style={styles.primaryButtonText}>Done</Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
             </View>
 
             <View style={styles.settingsSection}>
@@ -1713,6 +1859,36 @@ function addDays(date: Date, days: number) {
   return nextDate;
 }
 
+function parseReminderTime(time: string) {
+  const [hourText, minuteText] = time.split(":");
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    return parseReminderTime(DEFAULT_DAILY_REMINDER_TIME);
+  }
+
+  return { hour, minute };
+}
+
+function createReminderDate(time: string) {
+  const { hour, minute } = parseReminderTime(time);
+  const date = new Date();
+  date.setHours(hour, minute, 0, 0);
+  return date;
+}
+
+function createReminderTimeString(date: Date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatReminderTime(time: string) {
+  return createReminderDate(time).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function getQuestEmoji(title: string) {
   const normalizedTitle = title.toLowerCase();
 
@@ -2146,6 +2322,27 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 14,
   },
+  settingsTimeRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: 12,
+  },
+  settingsTimeRowDisabled: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: palette.border,
+    paddingTop: 12,
+    opacity: 0.58,
+  },
   settingsLinkRow: {
     minHeight: 48,
     flexDirection: "row",
@@ -2169,6 +2366,24 @@ const styles = StyleSheet.create({
     color: palette.muted,
     fontSize: 13,
     lineHeight: 18,
+  },
+  settingsTimeValueWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  settingsTimePickerWrap: {
+    gap: 12,
+  },
+  settingsTimePickerActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  settingsTimeValue: {
+    color: palette.accent,
+    fontSize: 15,
+    fontWeight: "900",
   },
   settingsRowArrow: {
     color: palette.muted,

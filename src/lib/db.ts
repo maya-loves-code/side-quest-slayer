@@ -6,6 +6,10 @@ const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const LAST_OPEN_QUEST_SETTING_KEY = "last_open_quest_id";
 const DAILY_REMINDER_ENABLED_SETTING_KEY = "daily_reminder_enabled";
+const DAILY_REMINDER_TIME_SETTING_KEY = "daily_reminder_time";
+const DAILY_REMINDER_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export const DEFAULT_DAILY_REMINDER_TIME = "20:00";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -169,6 +173,35 @@ export async function setDailyReminderEnabled(enabled: boolean) {
     DAILY_REMINDER_ENABLED_SETTING_KEY,
     String(enabled)
   );
+}
+
+export async function getDailyReminderTime() {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<{ setting_value: string }>(
+    `SELECT setting_value FROM app_settings WHERE setting_key = ?`,
+    DAILY_REMINDER_TIME_SETTING_KEY
+  );
+
+  const savedTime = row?.setting_value;
+  return isDailyReminderTime(savedTime) ? savedTime : DEFAULT_DAILY_REMINDER_TIME;
+}
+
+export async function setDailyReminderTime(time: string) {
+  if (!isDailyReminderTime(time)) {
+    throw new Error("Daily reminder time must be formatted as HH:mm.");
+  }
+
+  const db = await getDatabase();
+
+  await db.runAsync(
+    `INSERT OR REPLACE INTO app_settings (setting_key, setting_value) VALUES (?, ?)`,
+    DAILY_REMINDER_TIME_SETTING_KEY,
+    time
+  );
+}
+
+function isDailyReminderTime(time: string | undefined): time is string {
+  return Boolean(time && DAILY_REMINDER_TIME_PATTERN.test(time));
 }
 
 export async function updateQuestEmoji(questId: number, emoji: string) {

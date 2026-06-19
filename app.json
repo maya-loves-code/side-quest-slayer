@@ -25,7 +25,8 @@
           "microphonePermission": false
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "ios": {
       "supportsTablet": true,
