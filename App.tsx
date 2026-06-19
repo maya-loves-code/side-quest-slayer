@@ -30,6 +30,7 @@ import {
 } from "react-native";
 
 import {
+  DEFAULT_DAILY_REMINDER_TIME,
   addEntry,
   clearEntryCaption,
   completeQuest,
@@ -82,7 +83,6 @@ const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵",
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 180;
 const FOOTER_ICON_SIZE = 24;
-const DEFAULT_DAILY_REMINDER_TIME = "20:00";
 const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
 const REFLECTION_PROMPTS = [
   "What felt easier today?",

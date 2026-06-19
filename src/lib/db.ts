@@ -7,8 +7,9 @@ const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const LAST_OPEN_QUEST_SETTING_KEY = "last_open_quest_id";
 const DAILY_REMINDER_ENABLED_SETTING_KEY = "daily_reminder_enabled";
 const DAILY_REMINDER_TIME_SETTING_KEY = "daily_reminder_time";
-const DEFAULT_DAILY_REMINDER_TIME = "20:00";
 const DAILY_REMINDER_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
+
+export const DEFAULT_DAILY_REMINDER_TIME = "20:00";
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
