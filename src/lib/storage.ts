@@ -40,6 +40,36 @@ export async function saveImportedPhoto(sourceUri: string) {
   return destination;
 }
 
+export async function saveDemoAssetPhoto(sourceUri: string, filename: string) {
+  await ensurePhotoDirectory();
+
+  const safeFilename = getSafeDemoAssetFilename(filename);
+  const destination = `${QUEST_PHOTO_DIR}/${safeFilename}`;
+  await FileSystem.deleteAsync(destination, { idempotent: true });
+
+  if (/^https?:\/\//i.test(sourceUri)) {
+    await FileSystem.downloadAsync(sourceUri, destination);
+  } else {
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: destination,
+    });
+  }
+
+  return destination;
+}
+
+function getSafeDemoAssetFilename(filename: string) {
+  const basename = filename.trim().split(/[\\/]/).pop() ?? "";
+  const safeFilename = basename.replace(/[^a-z0-9._-]/gi, "-").replace(/^\.+/, "");
+
+  if (!safeFilename || safeFilename === "." || safeFilename === "..") {
+    throw new Error("Invalid demo asset filename.");
+  }
+
+  return safeFilename;
+}
+
 export async function deleteStoredPhoto(uri: string) {
   try {
     const info = await FileSystem.getInfoAsync(uri);

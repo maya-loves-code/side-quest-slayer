@@ -31,9 +31,11 @@ import {
 
 import {
   DEFAULT_DAILY_REMINDER_TIME,
+  addDemoEntry,
   addEntry,
   clearEntryCaption,
   completeQuest,
+  createDemoQuest,
   createQuest,
   deleteAllAppData,
   deleteArchivedQuest,
@@ -52,9 +54,16 @@ import {
   updateQuestEmoji,
 } from "./src/lib/db";
 import { cancelDailyQuestReminder, scheduleDailyQuestReminder } from "./src/lib/notifications";
-import { deleteAllStoredPhotos, deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
+import {
+  deleteAllStoredPhotos,
+  deleteStoredPhoto,
+  saveCapturedPhoto,
+  saveDemoAssetPhoto,
+  saveImportedPhoto,
+} from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
 import type { JournalEntry, Quest } from "./src/types";
+import type { DemoQuestSeed } from "./src/dev/demoSeeds";
 
 type Screen = "home" | "trophies" | "settings";
 
@@ -145,6 +154,7 @@ export default function App() {
   const [deletingMoment, setDeletingMoment] = useState(false);
   const [deletingArchivedQuest, setDeletingArchivedQuest] = useState(false);
   const [deletingAllData, setDeletingAllData] = useState(false);
+  const [generatingDemoData, setGeneratingDemoData] = useState(false);
   const [schedulingReminder, setSchedulingReminder] = useState(false);
   const [dailyReminderEnabled, setDailyReminderEnabledState] = useState(false);
   const [dailyReminderTime, setDailyReminderTimeState] = useState(DEFAULT_DAILY_REMINDER_TIME);
@@ -178,6 +188,7 @@ export default function App() {
     entries.length === 0
       ? "Start your journey with your first step."
       : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
+  const localDataOperationInProgress = deletingAllData || generatingDemoData;
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -684,7 +695,7 @@ export default function App() {
   }
 
   function confirmDeleteAllData() {
-    if (deletingAllData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -703,7 +714,7 @@ export default function App() {
   }
 
   async function handleDeleteAllData() {
-    if (deletingAllData) {
+    if (localDataOperationInProgress) {
       return;
     }
 
@@ -714,33 +725,186 @@ export default function App() {
       await deleteAllStoredPhotos();
       await deleteAllAppData();
 
-      setScreen("home");
-      setQuestTitle("");
-      setActiveQuests([]);
-      setSelectedQuest(null);
-      setEntries([]);
-      setArchivedQuests([]);
-      setQuestPickerOpen(false);
-      setNewQuestFormOpen(false);
-      setCameraOpen(false);
-      setCaptionDraft("");
-      setPendingCaptureUri(null);
-      setPendingImportUri(null);
-      setDailyReminderEnabledState(false);
-      setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
-      setEmojiPickerOpen(false);
-      setSelectedMoment(null);
-      setSelectedMomentReadOnly(false);
-      setMomentMenuOpen(false);
-      setHighlightedMomentId(null);
-      setJourneyPair({ first: null, latest: null });
-      setArchivedQuestView(null);
+      resetAppStateAfterLocalDataClear();
     } catch (error) {
       console.error(error);
       Alert.alert("Delete error", "Your app data could not be deleted. Try one more time.");
     } finally {
       setDeletingAllData(false);
     }
+  }
+
+  function resetAppStateAfterLocalDataClear() {
+    setScreen("home");
+    setQuestTitle("");
+    setActiveQuests([]);
+    setSelectedQuest(null);
+    setEntries([]);
+    setArchivedQuests([]);
+    setQuestPickerOpen(false);
+    setNewQuestFormOpen(false);
+    setCameraOpen(false);
+    setCaptionDraft("");
+    setPendingCaptureUri(null);
+    setPendingImportUri(null);
+    setDailyReminderEnabledState(false);
+    setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
+    setEmojiPickerOpen(false);
+    setSelectedMoment(null);
+    setSelectedMomentReadOnly(false);
+    setMomentMenuOpen(false);
+    setHighlightedMomentId(null);
+    setJourneyPair({ first: null, latest: null });
+    setArchivedQuestView(null);
+  }
+
+  function confirmGenerateDemoData() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    Alert.alert(
+      "Generate Demo Data?",
+      "This will replace local app data on this development build with a screenshot-ready Writer quest.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Generate",
+          onPress: () => void handleGenerateDemoData(),
+        },
+      ]
+    );
+  }
+
+  function confirmGenerateCompletedQuest() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    Alert.alert(
+      "Generate Completed Quest?",
+      "This will add a completed Poet quest to the Trophy Room on this development build.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Generate",
+          onPress: () => void handleGenerateCompletedQuest(),
+        },
+      ]
+    );
+  }
+
+  function confirmClearDemoData() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    Alert.alert(
+      "Clear Demo Data?",
+      "This will clear local quests, photos, reminders, and settings on this development build.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => void handleClearDemoData(),
+        },
+      ]
+    );
+  }
+
+  async function handleGenerateDemoData() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      closeReminderTimePicker();
+      await cancelDailyQuestReminder();
+      await deleteAllStoredPhotos();
+      await deleteAllAppData();
+      resetAppStateAfterLocalDataClear();
+
+      const { WRITER_DEMO_QUEST } = loadDemoSeeds();
+      const writerQuest = await createDemoQuestFromSeeds(WRITER_DEMO_QUEST);
+
+      await setLastOpenQuestId(writerQuest.id);
+      await refreshData(writerQuest.id);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "Demo data could not be generated. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function handleGenerateCompletedQuest() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      const { POET_DEMO_QUEST } = loadDemoSeeds();
+      await createDemoQuestFromSeeds(POET_DEMO_QUEST);
+
+      setScreen("trophies");
+      setArchivedQuestView(null);
+      await refreshData(selectedQuest?.id);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "The completed demo quest could not be generated. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function handleClearDemoData() {
+    if (localDataOperationInProgress) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      closeReminderTimePicker();
+      await cancelDailyQuestReminder();
+      await deleteAllStoredPhotos();
+      await deleteAllAppData();
+      resetAppStateAfterLocalDataClear();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "Demo data could not be cleared. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function createDemoQuestFromSeeds(seed: DemoQuestSeed) {
+    const quest = await createDemoQuest(seed);
+
+    if (!quest) {
+      throw new Error("Demo quest could not be created.");
+    }
+
+    for (const entry of seed.entries) {
+      const source = Image.resolveAssetSource(entry.imageSource);
+
+      if (!source?.uri) {
+        throw new Error(`Missing demo image for ${entry.filename}.`);
+      }
+
+      const imageUri = await saveDemoAssetPhoto(source.uri, `quest-${quest.id}-${entry.filename}`);
+      await addDemoEntry({
+        questId: quest.id,
+        imageUri,
+        timestamp: entry.timestamp,
+        isMilestone: entry.isMilestone ?? 0,
+        caption: entry.caption,
+      });
+    }
+
+    return quest;
   }
 
   async function handleEmojiSelect(emoji: string) {
@@ -1439,6 +1603,47 @@ export default function App() {
               <Text style={styles.settingsText}>Local-first progress journal</Text>
             </View>
 
+            {__DEV__ ? (
+              <View style={styles.demoSection}>
+                <Text style={styles.settingsSectionTitle}>Demo Tools</Text>
+                <Text style={styles.settingsText}>
+                  Development-only data for screenshots, testing, and marketing assets.
+                </Text>
+                <Pressable
+                  onPress={confirmGenerateDemoData}
+                  style={localDataOperationInProgress ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={localDataOperationInProgress}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
+                  accessibilityLabel="Generate Demo Data"
+                >
+                  <Text style={styles.demoButtonText}>
+                    {generatingDemoData ? "Working..." : "Generate Demo Data"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmGenerateCompletedQuest}
+                  style={localDataOperationInProgress ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={localDataOperationInProgress}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
+                  accessibilityLabel="Generate Completed Quest"
+                >
+                  <Text style={styles.demoButtonText}>Generate Completed Quest</Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmClearDemoData}
+                  style={localDataOperationInProgress ? styles.demoDangerButtonDisabled : styles.demoDangerButton}
+                  disabled={localDataOperationInProgress}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: localDataOperationInProgress }}
+                  accessibilityLabel="Clear Demo Data"
+                >
+                  <Text style={styles.demoDangerButtonText}>Clear Demo Data</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
             <View style={styles.dangerSection}>
               <Text style={styles.dangerSectionTitle}>Danger Zone</Text>
               <Text style={styles.settingsRowTitle}>Delete All Data</Text>
@@ -1447,10 +1652,10 @@ export default function App() {
               </Text>
               <Pressable
                 onPress={confirmDeleteAllData}
-                style={deletingAllData ? styles.dangerButtonDisabled : styles.dangerButton}
-                disabled={deletingAllData}
+                style={localDataOperationInProgress ? styles.dangerButtonDisabled : styles.dangerButton}
+                disabled={localDataOperationInProgress}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: deletingAllData }}
+                accessibilityState={{ disabled: localDataOperationInProgress }}
                 accessibilityLabel="Delete All Data"
               >
                 <Text style={styles.dangerButtonText}>{deletingAllData ? "Deleting..." : "Delete All Data"}</Text>
@@ -1871,6 +2076,14 @@ function ReflectionText({ caption }: { caption: string }) {
       {remainingText ? ` ${remainingText}` : ""}
     </Text>
   );
+}
+
+function loadDemoSeeds() {
+  if (!__DEV__) {
+    throw new Error("Demo seeds are only available in development builds.");
+  }
+
+  return require("./src/dev/demoSeeds") as typeof import("./src/dev/demoSeeds");
 }
 
 function getEntryJourneyPair(entries: JournalEntry[]): JourneyState {
@@ -2465,6 +2678,14 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  demoSection: {
+    backgroundColor: "#f3f7ff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#c9d8ff",
+    padding: 16,
+    gap: 12,
+  },
   dangerSection: {
     backgroundColor: "#fff8f7",
     borderRadius: 8,
@@ -2563,6 +2784,54 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     lineHeight: 26,
+  },
+  demoButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  demoButtonDisabled: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    opacity: 0.58,
+  },
+  demoButtonText: {
+    color: palette.accent,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  demoDangerButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+  },
+  demoDangerButtonDisabled: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.dangerBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+    opacity: 0.58,
+  },
+  demoDangerButtonText: {
+    color: palette.danger,
+    fontSize: 14,
+    fontWeight: "900",
   },
   dangerButton: {
     alignSelf: "flex-start",
