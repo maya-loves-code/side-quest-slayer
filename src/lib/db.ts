@@ -182,7 +182,8 @@ export async function getDailyReminderTime() {
     DAILY_REMINDER_TIME_SETTING_KEY
   );
 
-  return isDailyReminderTime(row?.setting_value) ? row.setting_value : DEFAULT_DAILY_REMINDER_TIME;
+  const savedTime = row?.setting_value;
+  return isDailyReminderTime(savedTime) ? savedTime : DEFAULT_DAILY_REMINDER_TIME;
 }
 
 export async function setDailyReminderTime(time: string) {
