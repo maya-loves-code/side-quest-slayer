@@ -35,6 +35,8 @@ import {
   clearEntryCaption,
   completeQuest,
   createQuest,
+  deleteAllAppData,
+  deleteArchivedQuest,
   deleteEntry,
   getActiveQuests,
   getArchivedQuests,
@@ -50,7 +52,7 @@ import {
   updateQuestEmoji,
 } from "./src/lib/db";
 import { cancelDailyQuestReminder, scheduleDailyQuestReminder } from "./src/lib/notifications";
-import { deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
+import { deleteAllStoredPhotos, deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
 import type { JournalEntry, Quest } from "./src/types";
 
@@ -141,6 +143,8 @@ export default function App() {
   const [creatingQuest, setCreatingQuest] = useState(false);
   const [completingQuest, setCompletingQuest] = useState(false);
   const [deletingMoment, setDeletingMoment] = useState(false);
+  const [deletingArchivedQuest, setDeletingArchivedQuest] = useState(false);
+  const [deletingAllData, setDeletingAllData] = useState(false);
   const [schedulingReminder, setSchedulingReminder] = useState(false);
   const [dailyReminderEnabled, setDailyReminderEnabledState] = useState(false);
   const [dailyReminderTime, setDailyReminderTimeState] = useState(DEFAULT_DAILY_REMINDER_TIME);
@@ -629,6 +633,110 @@ export default function App() {
     setMomentMenuOpen(false);
     setSelectedMoment(null);
     setSelectedMomentReadOnly(false);
+  }
+
+  function confirmDeleteArchivedQuest(summary: ArchivedQuestSummary) {
+    if (deletingArchivedQuest) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete Quest?",
+      "This will permanently remove this completed quest from your Trophy Room.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => void handleDeleteArchivedQuest(summary),
+        },
+      ]
+    );
+  }
+
+  async function handleDeleteArchivedQuest(summary: ArchivedQuestSummary) {
+    if (deletingArchivedQuest) {
+      return;
+    }
+
+    try {
+      setDeletingArchivedQuest(true);
+      const questEntries = await getEntriesForQuest(summary.quest.id);
+
+      await Promise.all(questEntries.map((entry) => deleteStoredPhoto(entry.imageUri)));
+      await deleteArchivedQuest(summary.quest.id);
+
+      if (archivedQuestView?.quest.id === summary.quest.id) {
+        closeArchivedQuest();
+      }
+
+      await refreshData(selectedQuest?.id);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Delete error", "That completed quest could not be deleted. Try one more time.");
+    } finally {
+      setDeletingArchivedQuest(false);
+    }
+  }
+
+  function confirmDeleteAllData() {
+    if (deletingAllData) {
+      return;
+    }
+
+    Alert.alert(
+      "Delete All Data?",
+      "This will permanently delete all quests, photos, Trophy Room entries, reminders, and settings stored on this device. This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete All Data",
+          style: "destructive",
+          onPress: () => void handleDeleteAllData(),
+        },
+      ]
+    );
+  }
+
+  async function handleDeleteAllData() {
+    if (deletingAllData) {
+      return;
+    }
+
+    try {
+      setDeletingAllData(true);
+      closeReminderTimePicker();
+      await cancelDailyQuestReminder();
+      await deleteAllStoredPhotos();
+      await deleteAllAppData();
+
+      setScreen("home");
+      setQuestTitle("");
+      setActiveQuests([]);
+      setSelectedQuest(null);
+      setEntries([]);
+      setArchivedQuests([]);
+      setQuestPickerOpen(false);
+      setNewQuestFormOpen(false);
+      setCameraOpen(false);
+      setCaptionDraft("");
+      setPendingCaptureUri(null);
+      setPendingImportUri(null);
+      setDailyReminderEnabledState(false);
+      setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
+      setEmojiPickerOpen(false);
+      setSelectedMoment(null);
+      setSelectedMomentReadOnly(false);
+      setMomentMenuOpen(false);
+      setHighlightedMomentId(null);
+      setJourneyPair({ first: null, latest: null });
+      setArchivedQuestView(null);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Delete error", "Your app data could not be deleted. Try one more time.");
+    } finally {
+      setDeletingAllData(false);
+    }
   }
 
   async function handleEmojiSelect(emoji: string) {
@@ -1171,7 +1279,8 @@ export default function App() {
               <Text style={styles.sectionTitle}>Archived Journey</Text>
               {archivedQuestView.entries.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Text style={styles.emptyTitle}>No steps were logged for this quest.</Text>
+                  <Text style={styles.emptyTitle}>Quest complete</Text>
+                  <Text style={styles.sectionText}>This finished quest is saved in your Trophy Room.</Text>
                 </View>
               ) : (
                 <View style={styles.momentSections}>
@@ -1205,7 +1314,7 @@ export default function App() {
             {archivedQuests.length === 0 ? (
               <View style={styles.emptyState}>
                 <Text style={styles.emptyTitle}>No trophies yet</Text>
-                <Text style={styles.sectionText}>Finish a quest to earn your first one.</Text>
+                <Text style={styles.sectionText}>Finish a quest to save it here.</Text>
               </View>
             ) : (
               <View style={styles.trophyList}>
@@ -1214,6 +1323,8 @@ export default function App() {
                     key={questSummary.quest.id}
                     summary={questSummary}
                     onPress={() => openArchivedQuest(questSummary)}
+                    onDelete={() => confirmDeleteArchivedQuest(questSummary)}
+                    deleteDisabled={deletingArchivedQuest}
                   />
                 ))}
               </View>
@@ -1322,6 +1433,24 @@ export default function App() {
               <Text style={styles.settingsSectionTitle}>App Info</Text>
               <Text style={styles.settingsText}>Version 1.0.0</Text>
               <Text style={styles.settingsText}>Local-first progress journal</Text>
+            </View>
+
+            <View style={styles.dangerSection}>
+              <Text style={styles.dangerSectionTitle}>Danger Zone</Text>
+              <Text style={styles.settingsRowTitle}>Delete All Data</Text>
+              <Text style={styles.settingsText}>
+                Remove all quests, photos, Trophy Room entries, reminders, and settings stored on this device.
+              </Text>
+              <Pressable
+                onPress={confirmDeleteAllData}
+                style={deletingAllData ? styles.dangerButtonDisabled : styles.dangerButton}
+                disabled={deletingAllData}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: deletingAllData }}
+                accessibilityLabel="Delete All Data"
+              >
+                <Text style={styles.dangerButtonText}>{deletingAllData ? "Deleting..." : "Delete All Data"}</Text>
+              </Pressable>
             </View>
           </View>
         )}
@@ -1480,8 +1609,19 @@ function JourneyPanel({
   );
 }
 
-function TrophyCard({ summary, onPress }: { summary: ArchivedQuestSummary; onPress: () => void }) {
+function TrophyCard({
+  summary,
+  onPress,
+  onDelete,
+  deleteDisabled,
+}: {
+  summary: ArchivedQuestSummary;
+  onPress: () => void;
+  onDelete: () => void;
+  deleteDisabled: boolean;
+}) {
   const emoji = summary.quest.emoji ?? getQuestEmoji(summary.quest.title);
+  const hasEntries = summary.entries.length > 0;
   const stepLabel = `${summary.entries.length} ${summary.entries.length === 1 ? "step" : "steps"}`;
 
   return (
@@ -1494,24 +1634,40 @@ function TrophyCard({ summary, onPress }: { summary: ArchivedQuestSummary; onPre
           <Text style={styles.trophyTitle}>{summary.quest.title}</Text>
           <Text style={styles.trophyMeta}>Completed {formatDate(summary.quest.completedAt)}</Text>
         </View>
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+          style={styles.trophyDeleteButton}
+          disabled={deleteDisabled}
+          hitSlop={10}
+          accessibilityRole="button"
+          accessibilityLabel="Delete Quest"
+          accessibilityState={{ disabled: deleteDisabled }}
+        >
+          <MaterialCommunityIcons name="dots-horizontal" size={22} color={palette.muted} />
+        </Pressable>
       </View>
 
-      {summary.firstEntry || summary.latestEntry ? (
-        <View style={styles.trophyPreviewRow}>
-          <TrophyPreview label="First" entry={summary.firstEntry} />
-          <TrophyPreview label="Latest" entry={summary.latestEntry} />
-        </View>
+      {hasEntries ? (
+        <>
+          <View style={styles.trophyPreviewRow}>
+            <TrophyPreview label="First" entry={summary.firstEntry} />
+            <TrophyPreview label="Latest" entry={summary.latestEntry} />
+          </View>
+
+          <View style={styles.trophyStatsRow}>
+            <Text style={styles.trophyStatText}>{stepLabel}</Text>
+            <Text style={styles.trophyStatDivider}>•</Text>
+            <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
+          </View>
+        </>
       ) : (
-        <View style={styles.trophyEmptyPreview}>
-          <Text style={styles.trophyEmptyPreviewText}>No steps were logged for this quest.</Text>
+        <View style={styles.trophyStatsRow}>
+          <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
         </View>
       )}
-
-      <View style={styles.trophyStatsRow}>
-        <Text style={styles.trophyStatText}>{stepLabel}</Text>
-        <Text style={styles.trophyStatDivider}>•</Text>
-        <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
-      </View>
     </Pressable>
   );
 }
@@ -2305,8 +2461,21 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  dangerSection: {
+    backgroundColor: "#fff8f7",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.dangerBorder,
+    padding: 16,
+    gap: 12,
+  },
   settingsSectionTitle: {
     color: palette.ink,
+    fontSize: 17,
+    fontWeight: "900",
+  },
+  dangerSectionTitle: {
+    color: palette.danger,
     fontSize: 17,
     fontWeight: "900",
   },
@@ -2390,6 +2559,30 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     lineHeight: 26,
+  },
+  dangerButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+  },
+  dangerButtonDisabled: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.dangerBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+    opacity: 0.58,
+  },
+  dangerButtonText: {
+    color: palette.danger,
+    fontSize: 14,
+    fontWeight: "900",
   },
   input: {
     backgroundColor: "#fff",
@@ -2634,6 +2827,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  trophyDeleteButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   trophyEmojiBadge: {
     width: 48,
     height: 48,
@@ -2695,22 +2895,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     fontSize: 11,
     fontWeight: "900",
-  },
-  trophyEmptyPreview: {
-    borderRadius: 8,
-    backgroundColor: "rgba(237, 227, 255, 0.42)",
-    padding: 14,
-    minHeight: 70,
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  trophyEmptyPreviewText: {
-    color: palette.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "700",
-    textAlign: "center",
   },
   trophyStatsRow: {
     flexDirection: "row",

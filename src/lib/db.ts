@@ -221,6 +221,12 @@ export async function completeQuest(questId: number) {
   );
 }
 
+export async function deleteArchivedQuest(questId: number) {
+  const db = await getDatabase();
+
+  await db.runAsync(`DELETE FROM quests WHERE id = ? AND status = 'archived'`, questId);
+}
+
 export async function addEntry(questId: number, imageUri: string, isMilestone = 0, caption = "") {
   const db = await getDatabase();
   const timestamp = new Date().toISOString();
@@ -273,4 +279,14 @@ export async function getJourneyPair(questId: number) {
     first: first ? mapEntry(first) : null,
     latest: latest ? mapEntry(latest) : null,
   };
+}
+
+export async function deleteAllAppData() {
+  const db = await getDatabase();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`DELETE FROM entries`);
+    await db.runAsync(`DELETE FROM quests`);
+    await db.runAsync(`DELETE FROM app_settings`);
+  });
 }

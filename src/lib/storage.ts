@@ -55,6 +55,21 @@ export async function deleteStoredPhoto(uri: string) {
   }
 }
 
+export async function deleteAllStoredPhotos() {
+  try {
+    const info = await FileSystem.getInfoAsync(QUEST_PHOTO_DIR);
+
+    if (info.exists) {
+      await FileSystem.deleteAsync(QUEST_PHOTO_DIR, { idempotent: true });
+    }
+
+    return true;
+  } catch (error) {
+    console.warn("Could not delete stored photos", error);
+    return false;
+  }
+}
+
 async function assertReadablePhoto(uri: string) {
   const info = await FileSystem.getInfoAsync(uri);
 
