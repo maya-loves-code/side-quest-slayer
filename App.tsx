@@ -1,8 +1,9 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,11 +18,13 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  type StyleProp,
   Switch,
   Text,
   TextInput,
   useWindowDimensions,
   View,
+  type ViewStyle,
 } from "react-native";
 
 import {
@@ -69,9 +72,12 @@ type MomentSection = {
   entries: JournalEntry[];
 };
 
+type FooterIconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 180;
+const FOOTER_ICON_SIZE = 24;
 const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
 const REFLECTION_PROMPTS = [
   "What felt easier today?",
@@ -152,7 +158,7 @@ export default function App() {
     () => createMomentSections(archivedQuestView?.entries ?? []),
     [archivedQuestView?.entries]
   );
-  const momentTileWidth = Math.floor((width - 46) / 2);
+  const momentTileWidth = Math.min(Math.floor((width - 96) / 2), 148);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -885,8 +891,10 @@ export default function App() {
       </Modal>
 
       <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
-        <View style={styles.heroCard}>
-          <Text style={styles.title}>Side Quest Slayer</Text>
+        <View pointerEvents="none" style={styles.paperTexture}>
+          <View style={styles.paperFleckOne} />
+          <View style={styles.paperFleckTwo} />
+          <View style={styles.paperFleckThree} />
         </View>
 
         {screen === "home" ? (
@@ -904,9 +912,12 @@ export default function App() {
                 <Text style={styles.currentQuestSelectorChevron}>▼</Text>
               </Pressable>
 
-              <View style={styles.questCard}>
-                <View style={styles.questHeader}>
+              <View style={styles.questHeroScrap}>
+                <TapeLabel label="Active Quest" rotate="-3deg" />
+                <DoodleMark variant="spark" style={styles.heroSparkDoodle} />
+                <View style={styles.questHeroRow}>
                   <Pressable onPress={() => setEmojiPickerOpen(true)} style={styles.questEmojiButton}>
+                    <View pointerEvents="none" style={styles.questEmojiTape} />
                     <Text style={styles.questEmoji}>{activeEmoji}</Text>
                   </Pressable>
                   <View style={styles.questTitleWrap}>
@@ -918,31 +929,35 @@ export default function App() {
                     </Text>
                   </View>
                 </View>
-
-                <Pressable onPress={openCamera} style={styles.cameraButton} accessibilityLabel="Open camera">
-                  <Text style={styles.cameraButtonText}>
-                    {entries.length === 0 ? "Take Your First Step" : "Take Another Step"}
-                  </Text>
-                </Pressable>
+                <Text style={styles.questIdentityNote}>
+                  {entries.length === 0 ? "Messy first drafts count." : "Keep collecting proof while it is still in progress."}
+                </Text>
               </View>
 
-              <View style={styles.journeyCard}>
-                <Text style={styles.sectionTitle}>From Then to Now</Text>
-                <View style={styles.bridgeRow}>
-                  <JourneyPanel label="First" entry={journeyPair.first} onPress={openMoment} />
-                  <JourneyPanel label="Latest" entry={journeyPair.latest} onPress={openMoment} />
+              <Pressable onPress={openCamera} style={styles.logStepCard} accessibilityLabel="Open camera">
+                <View pointerEvents="none" style={styles.logStepPaperGrain} />
+                <View pointerEvents="none" style={styles.logStepTape} />
+                <View style={styles.logStepIconWrap}>
+                  <CameraGlyph />
                 </View>
-              </View>
+                <View style={styles.logStepCopy}>
+                  <Text style={styles.logStepTitle}>Log Today's Step</Text>
+                  <Text style={styles.logStepText}>Add your daily proof. Future you will be glad you did.</Text>
+                </View>
+                <Text style={styles.logStepArrow}>›</Text>
+              </Pressable>
 
               <View
                 onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
                 style={styles.scrapbookArea}
               >
-                <Text style={styles.sectionTitle}>Your Journey</Text>
+                <ScrapbookHeader title="Your Journey" note={`You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`} />
                 {entries.length === 0 ? (
-                  <View style={styles.emptyState}>
+                  <View style={styles.emptyScrapbookState}>
+                    <DoodleMark variant="star" style={styles.emptyStateStar} />
                     <Text style={styles.emptyTitle}>No steps yet</Text>
-                    <Text style={styles.sectionText}>Take your first step to begin.</Text>
+                    <Text style={styles.sectionText}>Take your first step to begin the page.</Text>
+                    <AddTodayTile tileWidth={momentTileWidth} onPress={openCamera} />
                   </View>
                 ) : (
                   <View style={styles.momentSections}>
@@ -960,11 +975,23 @@ export default function App() {
                               onPress={() => openMoment(item)}
                             />
                           ))}
+                          {section === momentSections[0] ? (
+                            <AddTodayTile tileWidth={momentTileWidth} onPress={openCamera} />
+                          ) : null}
                         </View>
                       </View>
                     ))}
                   </View>
                 )}
+                <Text style={styles.chainNote}>Keep the chain going</Text>
+              </View>
+
+              <View style={styles.journeyCard}>
+                <ScrapbookHeader title="From Then to Now" note="Look how far you have come." />
+                <View style={styles.bridgeRow}>
+                  <JourneyPanel label="Day 1" entry={journeyPair.first} onPress={openMoment} />
+                  <JourneyPanel label="Latest" entry={journeyPair.latest} onPress={openMoment} />
+                </View>
               </View>
 
               <View style={styles.sectionCard}>
@@ -1157,44 +1184,123 @@ export default function App() {
         <CelebrationOverlay key={celebrationKey} onDone={clearCelebration} />
       ) : null}
       <View style={styles.bottomNav}>
-        <Pressable
+        <BottomNavItem
+          label="Quest"
+          active={screen === "home"}
+          activeIcon="shield-sword"
+          inactiveIcon="shield-sword-outline"
           onPress={() => {
             setScreen("home");
             setArchivedQuestView(null);
           }}
-          style={screen === "home" ? styles.navItemActive : styles.navItem}
-        >
-          <Text style={screen === "home" ? styles.navIconActive : styles.navIcon}>
-            {screen === "home" ? "▣" : "▢"}
-          </Text>
-          <Text style={screen === "home" ? styles.navTextActive : styles.navText}>Quest</Text>
-        </Pressable>
-        <Pressable
+        />
+        <BottomNavItem
+          label="Trophy Room"
+          active={screen === "trophies"}
+          activeIcon="trophy"
+          inactiveIcon="trophy-outline"
           onPress={() => {
             setScreen("trophies");
             setArchivedQuestView(null);
           }}
-          style={screen === "trophies" ? styles.navItemActive : styles.navItem}
-        >
-          <Text style={screen === "trophies" ? styles.navIconActive : styles.navIcon}>
-            {screen === "trophies" ? "★" : "☆"}
-          </Text>
-          <Text style={screen === "trophies" ? styles.navTextActive : styles.navText}>Trophy Room</Text>
-        </Pressable>
-        <Pressable
+        />
+        <BottomNavItem
+          label="Settings"
+          active={screen === "settings"}
+          activeIcon="cog"
+          inactiveIcon="cog-outline"
           onPress={() => {
             setScreen("settings");
             setArchivedQuestView(null);
           }}
-          style={screen === "settings" ? styles.navItemActive : styles.navItem}
-        >
-          <Text style={screen === "settings" ? styles.navIconActive : styles.navIcon}>
-            {screen === "settings" ? "●" : "○"}
-          </Text>
-          <Text style={screen === "settings" ? styles.navTextActive : styles.navText}>Settings</Text>
-        </Pressable>
+        />
       </View>
     </SafeAreaView>
+  );
+}
+
+function BottomNavItem({
+  label,
+  active,
+  activeIcon,
+  inactiveIcon,
+  onPress,
+}: {
+  label: string;
+  active: boolean;
+  activeIcon: FooterIconName;
+  inactiveIcon: FooterIconName;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={active ? styles.navItemActive : styles.navItem}
+    >
+      <View style={styles.navIconSlot}>
+        <MaterialCommunityIcons
+          name={active ? activeIcon : inactiveIcon}
+          size={FOOTER_ICON_SIZE}
+          color={active ? palette.accent : palette.muted}
+        />
+      </View>
+      <Text style={active ? styles.navTextActive : styles.navText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function TapeLabel({ label, rotate = "-2deg" }: { label: string; rotate?: string }) {
+  return (
+    <View style={[styles.tapeLabel, { transform: [{ rotate }] }]}>
+      <View style={styles.tapeTornEdgeLeft} />
+      <Text style={styles.tapeLabelText}>{label}</Text>
+      <View style={styles.tapeTornEdgeRight} />
+    </View>
+  );
+}
+
+function ScrapbookHeader({ title, note }: { title: string; note?: string }) {
+  return (
+    <View style={styles.scrapbookHeader}>
+      <TapeLabel label={title} rotate="-1.5deg" />
+      {note ? <Text style={styles.scrapbookHeaderNote}>{note}</Text> : null}
+    </View>
+  );
+}
+
+function DoodleMark({ variant, style }: { variant: "arrow" | "spark" | "star" | "swirl"; style?: StyleProp<ViewStyle> }) {
+  const text = variant === "arrow" ? "↘" : variant === "spark" ? "✶" : variant === "star" ? "☆" : "↝";
+
+  return (
+    <View pointerEvents="none" style={[styles.doodleMark, style]}>
+      <Text style={styles.doodleText}>{text}</Text>
+    </View>
+  );
+}
+
+function CameraGlyph() {
+  return (
+    <View style={styles.cameraGlyph}>
+      <View style={styles.cameraGlyphTop} />
+      <View style={styles.cameraGlyphLens} />
+      <View style={styles.cameraGlyphFlash} />
+    </View>
+  );
+}
+
+function AddTodayTile({ tileWidth, onPress }: { tileWidth: number; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.addTodayTile, { width: tileWidth }]}
+      accessibilityLabel="Add today's step"
+    >
+      <View style={styles.addTodayTape} />
+      <Text style={styles.addTodayIcon}>＋</Text>
+      <Text style={styles.addTodayText}>Add Today's Step</Text>
+    </Pressable>
   );
 }
 
@@ -1300,7 +1406,8 @@ function MomentTile({
   onPress: () => void;
 }) {
   const highlightProgress = useRef(new Animated.Value(0)).current;
-  const isTall = index % 4 === 0;
+  const isTall = index > 2 && index % 5 === 0;
+  const rotation = getScrapRotation(index);
 
   useEffect(() => {
     if (!isHighlighted) {
@@ -1335,10 +1442,11 @@ function MomentTile({
       style={[
         styles.momentTile,
         isTall ? styles.momentTileTall : styles.momentTileSquare,
-        { width: tileWidth, transform: [{ scale }] },
+        { width: tileWidth, transform: [{ rotate: rotation }, { scale }] },
       ]}
     >
       <Pressable onPress={onPress} style={styles.momentTileButton}>
+        <View pointerEvents="none" style={styles.photoTape} />
         <Image source={{ uri: item.imageUri }} style={styles.momentTileImage} />
         <Animated.View pointerEvents="none" style={[styles.momentTileGlow, { opacity: glowOpacity }]} />
         {isHighlighted ? (
@@ -1590,6 +1698,11 @@ function getMomentSectionTitle(dateString: string) {
   return String(momentDay.getFullYear());
 }
 
+function getScrapRotation(index: number) {
+  const rotations = ["-2.5deg", "1.6deg", "-0.8deg", "2.4deg", "-1.4deg", "0.9deg"];
+  return rotations[index % rotations.length];
+}
+
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
@@ -1715,9 +1828,43 @@ const styles = StyleSheet.create({
     backgroundColor: palette.paper,
   },
   container: {
-    padding: 18,
-    paddingBottom: 132,
-    gap: 26,
+    position: "relative",
+    paddingHorizontal: 18,
+    paddingTop: 12,
+    paddingBottom: 168,
+    gap: 18,
+  },
+  paperTexture: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  paperFleckOne: {
+    position: "absolute",
+    width: 138,
+    height: 138,
+    borderRadius: 69,
+    backgroundColor: palette.paperFleck,
+    right: -72,
+    top: 118,
+    opacity: 0.22,
+  },
+  paperFleckTwo: {
+    position: "absolute",
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: "rgba(124, 58, 237, 0.035)",
+    left: -52,
+    top: 310,
+  },
+  paperFleckThree: {
+    position: "absolute",
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(233, 217, 183, 0.16)",
+    right: -96,
+    bottom: 220,
   },
   loadingScreen: {
     flex: 1,
@@ -1766,17 +1913,19 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     maxWidth: "100%",
     borderRadius: 8,
-    paddingHorizontal: 2,
-    paddingVertical: 1,
-    marginTop: -18,
-    marginBottom: -16,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    marginBottom: -4,
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
+    backgroundColor: "rgba(255, 254, 249, 0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.11)",
   },
   currentQuestSelectorText: {
     flexShrink: 1,
-    color: palette.ink,
+    color: palette.pencil,
     fontSize: 14,
     lineHeight: 18,
     fontWeight: "800",
@@ -1892,6 +2041,63 @@ const styles = StyleSheet.create({
   },
   questSheetForm: {
     gap: 10,
+  },
+  tapeLabel: {
+    alignSelf: "flex-start",
+    minHeight: 34,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    backgroundColor: palette.lavenderTape,
+    borderRadius: 2,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.32,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  tapeTornEdgeLeft: {
+    position: "absolute",
+    left: -4,
+    top: 5,
+    bottom: 5,
+    width: 7,
+    backgroundColor: "rgba(255, 250, 240, 0.42)",
+  },
+  tapeTornEdgeRight: {
+    position: "absolute",
+    right: -4,
+    top: 6,
+    bottom: 4,
+    width: 7,
+    backgroundColor: "rgba(255, 250, 240, 0.36)",
+  },
+  tapeLabelText: {
+    color: palette.accentDark,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  scrapbookHeader: {
+    gap: 10,
+  },
+  scrapbookHeaderNote: {
+    color: palette.pencil,
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: "italic",
+    fontWeight: "600",
+    paddingLeft: 4,
+  },
+  doodleMark: {
+    position: "absolute",
+    zIndex: 2,
+  },
+  doodleText: {
+    color: palette.lavenderTapeDark,
+    fontSize: 24,
+    lineHeight: 28,
+    fontWeight: "900",
   },
   sectionTitle: {
     fontSize: 22,
@@ -2715,32 +2921,52 @@ const styles = StyleSheet.create({
     color: palette.danger,
     fontWeight: "900",
   },
-  questCard: {
-    backgroundColor: palette.panel,
-    borderRadius: 8,
-    padding: 22,
-    gap: 22,
-    shadowColor: palette.shadowStrong,
-    shadowOpacity: 1,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 16 },
-    elevation: 10,
+  questHeroScrap: {
+    position: "relative",
+    paddingTop: 4,
+    paddingBottom: 2,
+    gap: 12,
   },
-  questHeader: {
+  heroSparkDoodle: {
+    right: 14,
+    bottom: 8,
+    opacity: 0.42,
+    transform: [{ rotate: "-14deg" }],
+  },
+  questHeroRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 14,
+    paddingTop: 4,
   },
   questEmojiButton: {
     width: 72,
-    height: 72,
+    height: 86,
     borderRadius: 8,
-    backgroundColor: palette.accentSoft,
+    backgroundColor: palette.photoPaper,
+    borderWidth: 6,
+    borderColor: palette.photoPaper,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.42,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+    transform: [{ rotate: "-3deg" }],
+  },
+  questEmojiTape: {
+    position: "absolute",
+    top: -9,
+    width: 48,
+    height: 15,
+    backgroundColor: "rgba(233, 217, 183, 0.76)",
+    borderRadius: 2,
+    zIndex: 2,
+    transform: [{ rotate: "3deg" }],
   },
   questEmoji: {
-    fontSize: 40,
+    fontSize: 38,
   },
   questTitleWrap: {
     flex: 1,
@@ -2748,14 +2974,129 @@ const styles = StyleSheet.create({
   },
   questTitle: {
     color: palette.ink,
-    fontSize: 32,
+    fontSize: 38,
     fontWeight: "900",
-    lineHeight: 36,
+    lineHeight: 40,
   },
   momentCount: {
-    color: palette.muted,
+    color: palette.pencil,
     fontSize: 15,
+    fontWeight: "800",
+  },
+  questIdentityNote: {
+    color: palette.pencil,
+    fontSize: 14,
+    lineHeight: 20,
+    fontStyle: "italic",
+    fontWeight: "600",
+    paddingLeft: 4,
+  },
+  logStepCard: {
+    alignSelf: "stretch",
+    minHeight: 104,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    backgroundColor: palette.accent,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.58,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 5,
+    overflow: "hidden",
+  },
+  logStepPaperGrain: {
+    position: "absolute",
+    left: -28,
+    right: -28,
+    top: -34,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
+    transform: [{ rotate: "-3deg" }],
+  },
+  logStepTape: {
+    position: "absolute",
+    right: 56,
+    top: -4,
+    width: 58,
+    height: 14,
+    borderRadius: 2,
+    backgroundColor: "rgba(233, 217, 183, 0.28)",
+    transform: [{ rotate: "2deg" }],
+  },
+  logStepIconWrap: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.22)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraGlyph: {
+    width: 31,
+    height: 24,
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.92)",
+    borderRadius: 5,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraGlyphTop: {
+    position: "absolute",
+    top: -8,
+    left: 6,
+    width: 13,
+    height: 7,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+  },
+  cameraGlyphLens: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.92)",
+  },
+  cameraGlyphFlash: {
+    position: "absolute",
+    right: 4,
+    top: 4,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+  },
+  logStepCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  logStepTitle: {
+    color: "#fff",
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: "900",
+    textTransform: "uppercase",
+  },
+  logStepText: {
+    color: "rgba(255, 255, 255, 0.84)",
+    fontSize: 14,
+    lineHeight: 21,
     fontWeight: "700",
+  },
+  logStepArrow: {
+    color: "#fff",
+    fontSize: 42,
+    lineHeight: 46,
+    fontWeight: "500",
   },
   cameraButton: {
     alignSelf: "stretch",
@@ -2775,46 +3116,62 @@ const styles = StyleSheet.create({
     fontWeight: "900",
   },
   journeyCard: {
-    backgroundColor: palette.card,
+    position: "relative",
+    backgroundColor: "rgba(255, 254, 249, 0.86)",
     borderRadius: 8,
-    padding: 18,
+    padding: 14,
     gap: 14,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.1)",
     shadowColor: palette.shadow,
-    shadowOpacity: 0.34,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
     elevation: 2,
   },
   bridgeRow: {
     flexDirection: "row",
-    gap: 12,
+    gap: 16,
   },
   bridgePanel: {
     flex: 1,
-    gap: 8,
+    gap: 10,
   },
   bridgeLabel: {
-    textAlign: "center",
-    fontWeight: "800",
+    fontWeight: "900",
     color: palette.ink,
+    fontSize: 14,
   },
   bridgeImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 8,
+    borderRadius: 3,
     backgroundColor: palette.panel,
   },
   bridgeImageWrap: {
     width: "100%",
-    aspectRatio: 0.85,
+    aspectRatio: 0.92,
+    backgroundColor: palette.photoPaper,
+    borderWidth: 8,
+    borderBottomWidth: 22,
+    borderColor: palette.photoPaper,
+    borderRadius: 4,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.38,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   bridgePlaceholder: {
     aspectRatio: 0.85,
     borderRadius: 8,
-    backgroundColor: palette.panel,
+    backgroundColor: "rgba(237, 227, 255, 0.5)",
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(124, 58, 237, 0.28)",
   },
   placeholderText: {
     textAlign: "center",
@@ -2822,73 +3179,164 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   scrapbookArea: {
-    gap: 18,
+    position: "relative",
+    gap: 14,
+    backgroundColor: "rgba(255, 254, 249, 0.88)",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.09)",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 2,
   },
   momentSections: {
-    gap: 26,
+    gap: 22,
   },
   momentSection: {
-    gap: 10,
+    gap: 12,
   },
   momentSectionTitle: {
-    color: palette.ink,
+    color: palette.pencil,
     fontSize: 12,
     fontWeight: "900",
     letterSpacing: 0,
     opacity: 0.7,
+    textTransform: "uppercase",
   },
   momentGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    rowGap: 10,
+    rowGap: 16,
   },
   momentTile: {
     overflow: "visible",
-    borderRadius: 8,
-    backgroundColor: palette.panel,
+    borderRadius: 4,
+    backgroundColor: palette.photoPaper,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.42,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
+    shadowOpacity: 0.4,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
   momentTileButton: {
     flex: 1,
-    borderRadius: 8,
+    borderRadius: 4,
+    padding: 6,
+    paddingBottom: 23,
   },
   momentTileGlow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(124, 58, 237, 0.18)",
     borderWidth: 2,
     borderColor: "rgba(124, 58, 237, 0.44)",
-    borderRadius: 8,
+    borderRadius: 4,
   },
   momentTileSquare: {
-    aspectRatio: 1,
+    aspectRatio: 0.94,
   },
   momentTileTall: {
-    aspectRatio: 0.76,
+    aspectRatio: 0.84,
   },
   momentTileImage: {
     width: "100%",
     height: "100%",
-    borderRadius: 8,
+    borderRadius: 3,
     resizeMode: "cover",
     backgroundColor: palette.panel,
+  },
+  photoTape: {
+    position: "absolute",
+    top: -7,
+    alignSelf: "center",
+    width: 54,
+    height: 16,
+    backgroundColor: "rgba(233, 217, 183, 0.76)",
+    borderRadius: 2,
+    zIndex: 2,
+    transform: [{ rotate: "-2deg" }],
   },
   dateTag: {
     position: "absolute",
     left: 8,
-    bottom: 7,
-    backgroundColor: "rgba(40, 33, 48, 0.56)",
-    color: "#fff",
-    borderRadius: 6,
+    bottom: 6,
+    backgroundColor: palette.photoPaper,
+    color: palette.ink,
+    borderRadius: 2,
     overflow: "hidden",
-    paddingHorizontal: 7,
+    paddingHorizontal: 8,
     paddingVertical: 4,
-    fontSize: 11,
+    fontSize: 12,
+    fontWeight: "900",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.22,
+    shadowRadius: 3,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  emptyScrapbookState: {
+    minHeight: 190,
+    borderRadius: 8,
+    backgroundColor: "rgba(241, 232, 255, 0.52)",
+    borderWidth: 1,
+    borderStyle: "dashed",
+    borderColor: "rgba(124, 58, 237, 0.26)",
+    padding: 16,
+    gap: 10,
+    alignItems: "flex-start",
+  },
+  emptyStateStar: {
+    right: 18,
+    top: 16,
+    opacity: 0.62,
+    transform: [{ rotate: "18deg" }],
+  },
+  addTodayTile: {
+    aspectRatio: 0.94,
+    alignSelf: "center",
+    borderRadius: 8,
+    borderWidth: 2,
+    borderStyle: "dashed",
+    borderColor: "rgba(124, 58, 237, 0.24)",
+    backgroundColor: "rgba(255, 254, 249, 0.74)",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 9,
+    marginTop: 4,
+  },
+  addTodayTape: {
+    position: "absolute",
+    top: -8,
+    width: 58,
+    height: 16,
+    backgroundColor: "rgba(217, 188, 255, 0.72)",
+    borderRadius: 2,
+    transform: [{ rotate: "3deg" }],
+  },
+  addTodayIcon: {
+    color: palette.muted,
+    fontSize: 30,
+    fontWeight: "900",
+    opacity: 0.78,
+  },
+  addTodayText: {
+    maxWidth: 105,
+    color: palette.muted,
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: "center",
     fontWeight: "800",
+  },
+  chainNote: {
+    alignSelf: "center",
+    color: palette.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    fontStyle: "italic",
+    fontWeight: "600",
+    transform: [{ rotate: "-2deg" }],
   },
   celebrationOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -2925,55 +3373,53 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: 12,
+    right: 12,
+    bottom: 8,
     flexDirection: "row",
-    backgroundColor: palette.paper,
+    backgroundColor: "rgba(255, 254, 249, 0.96)",
     borderTopWidth: 1,
-    borderTopColor: "rgba(124, 58, 237, 0.12)",
-    paddingHorizontal: 14,
-    paddingTop: 8,
-    paddingBottom: 18,
+    borderTopColor: "rgba(124, 58, 237, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 6,
     shadowColor: palette.shadowStrong,
-    shadowOpacity: 0.42,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.24,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: -2 },
     elevation: 8,
   },
   navItem: {
     flex: 1,
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: "center",
-    gap: 4,
+    gap: 3,
   },
   navItemActive: {
     flex: 1,
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     alignItems: "center",
-    gap: 4,
+    gap: 3,
+    backgroundColor: palette.accentSoft,
   },
-  navIcon: {
-    color: palette.muted,
-    fontSize: 20,
-    fontWeight: "900",
-    opacity: 0.68,
-  },
-  navIconActive: {
-    color: palette.accent,
-    fontSize: 20,
-    fontWeight: "900",
+  navIconSlot: {
+    width: FOOTER_ICON_SIZE,
+    height: FOOTER_ICON_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
   },
   navText: {
     color: palette.muted,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "800",
   },
   navTextActive: {
     color: palette.accent,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "900",
   },
 });
