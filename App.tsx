@@ -174,6 +174,10 @@ export default function App() {
   const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
+  const journeyNote =
+    entries.length === 0
+      ? "Start your journey with your first step."
+      : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -1152,7 +1156,7 @@ export default function App() {
                 onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
                 style={styles.scrapbookArea}
               >
-                <ScrapbookHeader title="Your Journey" note={`You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`} />
+                <ScrapbookHeader title="Your Journey" note={journeyNote} />
                 {entries.length === 0 ? (
                   <View style={styles.emptyScrapbookState}>
                     <DoodleMark variant="star" style={styles.emptyStateStar} />
