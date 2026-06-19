@@ -40,6 +40,25 @@ export async function saveImportedPhoto(sourceUri: string) {
   return destination;
 }
 
+export async function saveDemoAssetPhoto(sourceUri: string, filename: string) {
+  await ensurePhotoDirectory();
+
+  const safeFilename = filename.replace(/[^a-z0-9._-]/gi, "-");
+  const destination = `${QUEST_PHOTO_DIR}/${safeFilename}`;
+  await FileSystem.deleteAsync(destination, { idempotent: true });
+
+  if (/^https?:\/\//i.test(sourceUri)) {
+    await FileSystem.downloadAsync(sourceUri, destination);
+  } else {
+    await FileSystem.copyAsync({
+      from: sourceUri,
+      to: destination,
+    });
+  }
+
+  return destination;
+}
+
 export async function deleteStoredPhoto(uri: string) {
   try {
     const info = await FileSystem.getInfoAsync(uri);

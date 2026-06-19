@@ -134,6 +134,38 @@ export async function createQuest(title: string, emoji: string | null = null) {
   return getQuestById(result.lastInsertRowId);
 }
 
+export async function createDemoQuest({
+  title,
+  emoji,
+  status,
+  startedAt,
+  completedAt = null,
+}: {
+  title: string;
+  emoji: string | null;
+  status: "active" | "archived";
+  startedAt: string;
+  completedAt?: string | null;
+}) {
+  const db = await getDatabase();
+  const savedTitle = title.trim().slice(0, QUEST_TITLE_CHARACTER_LIMIT);
+
+  if (!savedTitle) {
+    throw new Error("Quest title is required.");
+  }
+
+  const result = await db.runAsync(
+    `INSERT INTO quests (title, emoji, status, started_at, completed_at) VALUES (?, ?, ?, ?, ?)`,
+    savedTitle,
+    emoji,
+    status,
+    startedAt,
+    completedAt
+  );
+
+  return getQuestById(result.lastInsertRowId);
+}
+
 export async function getLastOpenQuestId() {
   const db = await getDatabase();
   const row = await db.getFirstAsync<{ setting_value: string }>(
@@ -230,6 +262,32 @@ export async function deleteArchivedQuest(questId: number) {
 export async function addEntry(questId: number, imageUri: string, isMilestone = 0, caption = "") {
   const db = await getDatabase();
   const timestamp = new Date().toISOString();
+  const savedCaption = caption.trim().slice(0, ENTRY_CAPTION_CHARACTER_LIMIT) || null;
+
+  await db.runAsync(
+    `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
+    questId,
+    imageUri,
+    timestamp,
+    isMilestone,
+    savedCaption
+  );
+}
+
+export async function addDemoEntry({
+  questId,
+  imageUri,
+  timestamp,
+  isMilestone = 0,
+  caption = "",
+}: {
+  questId: number;
+  imageUri: string;
+  timestamp: string;
+  isMilestone?: number;
+  caption?: string;
+}) {
+  const db = await getDatabase();
   const savedCaption = caption.trim().slice(0, ENTRY_CAPTION_CHARACTER_LIMIT) || null;
 
   await db.runAsync(

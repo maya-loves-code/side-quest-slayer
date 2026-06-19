@@ -31,9 +31,11 @@ import {
 
 import {
   DEFAULT_DAILY_REMINDER_TIME,
+  addDemoEntry,
   addEntry,
   clearEntryCaption,
   completeQuest,
+  createDemoQuest,
   createQuest,
   deleteAllAppData,
   deleteArchivedQuest,
@@ -52,7 +54,13 @@ import {
   updateQuestEmoji,
 } from "./src/lib/db";
 import { cancelDailyQuestReminder, scheduleDailyQuestReminder } from "./src/lib/notifications";
-import { deleteAllStoredPhotos, deleteStoredPhoto, saveCapturedPhoto, saveImportedPhoto } from "./src/lib/storage";
+import {
+  deleteAllStoredPhotos,
+  deleteStoredPhoto,
+  saveCapturedPhoto,
+  saveDemoAssetPhoto,
+  saveImportedPhoto,
+} from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
 import type { JournalEntry, Quest } from "./src/types";
 
@@ -79,7 +87,151 @@ type MomentSection = {
   entries: JournalEntry[];
 };
 
+type DemoEntrySeed = {
+  caption: string;
+  timestamp: string;
+  imageSource: number;
+  filename: string;
+  isMilestone?: number;
+};
+
 type FooterIconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
+
+const WRITER_DEMO_ENTRIES: DemoEntrySeed[] = [
+  {
+    caption: "Brainstorming story ideas and chasing the one that keeps tugging at me.",
+    timestamp: "2026-01-08T18:20:00.000Z",
+    imageSource: require("./assets/demo/demo-01.png"),
+    filename: "demo-writer-01.png",
+    isMilestone: 1,
+  },
+  {
+    caption: "Character notes are starting to feel like real people with messy wants.",
+    timestamp: "2026-01-22T20:10:00.000Z",
+    imageSource: require("./assets/demo/demo-02.png"),
+    filename: "demo-writer-02.png",
+  },
+  {
+    caption: "Main character backstory unlocked a better emotional engine for the book.",
+    timestamp: "2026-02-06T19:35:00.000Z",
+    imageSource: require("./assets/demo/demo-03.png"),
+    filename: "demo-writer-03.png",
+  },
+  {
+    caption: "Plot outline is taped together enough to start moving.",
+    timestamp: "2026-02-24T17:55:00.000Z",
+    imageSource: require("./assets/demo/demo-04.png"),
+    filename: "demo-writer-04.png",
+  },
+  {
+    caption: "Chapter 1 draft exists. It is rough, but it is real.",
+    timestamp: "2026-03-07T21:05:00.000Z",
+    imageSource: require("./assets/demo/demo-05.png"),
+    filename: "demo-writer-05.png",
+  },
+  {
+    caption: "Writing session at a coffee shop got me through a tricky scene.",
+    timestamp: "2026-03-23T16:30:00.000Z",
+    imageSource: require("./assets/demo/demo-06.png"),
+    filename: "demo-writer-06.png",
+  },
+  {
+    caption: "Chapter 3 progress. The middle is starting to have a pulse.",
+    timestamp: "2026-04-04T18:45:00.000Z",
+    imageSource: require("./assets/demo/demo-07.png"),
+    filename: "demo-writer-07.png",
+  },
+  {
+    caption: "Chapter 5 progress after a stubborn week. Still showing up.",
+    timestamp: "2026-04-18T22:15:00.000Z",
+    imageSource: require("./assets/demo/demo-08.png"),
+    filename: "demo-writer-08.png",
+  },
+  {
+    caption: "Editing manuscript pages with a less precious heart today.",
+    timestamp: "2026-05-02T19:10:00.000Z",
+    imageSource: require("./assets/demo/demo-09.png"),
+    filename: "demo-writer-09.png",
+  },
+  {
+    caption: "Feedback from beta readers gave me exactly the clarity I needed.",
+    timestamp: "2026-05-14T20:25:00.000Z",
+    imageSource: require("./assets/demo/demo-10.png"),
+    filename: "demo-writer-10.png",
+  },
+  {
+    caption: "Revision notes are turning the draft into something sturdier.",
+    timestamp: "2026-05-25T18:00:00.000Z",
+    imageSource: require("./assets/demo/demo-11.png"),
+    filename: "demo-writer-11.png",
+  },
+  {
+    caption: "Final manuscript draft exported. Tiny confetti moment.",
+    timestamp: "2026-06-04T21:40:00.000Z",
+    imageSource: require("./assets/demo/demo-12.png"),
+    filename: "demo-writer-12.png",
+  },
+  {
+    caption: "Query letter draft is sharp enough to send soon.",
+    timestamp: "2026-06-12T17:30:00.000Z",
+    imageSource: require("./assets/demo/demo-13.png"),
+    filename: "demo-writer-13.png",
+  },
+  {
+    caption: "Manuscript submitted. Proud of every messy page that got me here.",
+    timestamp: "2026-06-18T18:50:00.000Z",
+    imageSource: require("./assets/demo/demo-14.png"),
+    filename: "demo-writer-14.png",
+    isMilestone: 1,
+  },
+];
+
+const POET_DEMO_ENTRIES: DemoEntrySeed[] = [
+  {
+    caption: "Collected old poems from notebooks, notes apps, and forgotten drafts.",
+    timestamp: "2026-01-12T19:00:00.000Z",
+    imageSource: require("./assets/demo/demo-15.png"),
+    filename: "demo-poet-01.png",
+    isMilestone: 1,
+  },
+  {
+    caption: "Chose the collection theme: becoming, leaving, returning.",
+    timestamp: "2026-01-28T20:15:00.000Z",
+    imageSource: require("./assets/demo/demo-16.png"),
+    filename: "demo-poet-02.png",
+  },
+  {
+    caption: "Organized poems into sections that finally make emotional sense.",
+    timestamp: "2026-02-11T18:30:00.000Z",
+    imageSource: require("./assets/demo/demo-17.png"),
+    filename: "demo-poet-03.png",
+  },
+  {
+    caption: "Edited the first batch and cut the lines that were only pretending.",
+    timestamp: "2026-03-03T21:20:00.000Z",
+    imageSource: require("./assets/demo/demo-18.png"),
+    filename: "demo-poet-04.png",
+  },
+  {
+    caption: "Designed a title page that feels quiet and brave.",
+    timestamp: "2026-04-09T17:40:00.000Z",
+    imageSource: require("./assets/demo/demo-19.png"),
+    filename: "demo-poet-05.png",
+  },
+  {
+    caption: "Final proofreading pass. Found three tiny typos and one better ending.",
+    timestamp: "2026-05-21T19:25:00.000Z",
+    imageSource: require("./assets/demo/demo-20.png"),
+    filename: "demo-poet-06.png",
+  },
+  {
+    caption: "Completed poetry collection. This one gets to live outside my notebook.",
+    timestamp: "2026-06-08T18:10:00.000Z",
+    imageSource: require("./assets/demo/demo-21.png"),
+    filename: "demo-poet-07.png",
+    isMilestone: 1,
+  },
+];
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
@@ -145,6 +297,7 @@ export default function App() {
   const [deletingMoment, setDeletingMoment] = useState(false);
   const [deletingArchivedQuest, setDeletingArchivedQuest] = useState(false);
   const [deletingAllData, setDeletingAllData] = useState(false);
+  const [generatingDemoData, setGeneratingDemoData] = useState(false);
   const [schedulingReminder, setSchedulingReminder] = useState(false);
   const [dailyReminderEnabled, setDailyReminderEnabledState] = useState(false);
   const [dailyReminderTime, setDailyReminderTimeState] = useState(DEFAULT_DAILY_REMINDER_TIME);
@@ -714,33 +867,215 @@ export default function App() {
       await deleteAllStoredPhotos();
       await deleteAllAppData();
 
-      setScreen("home");
-      setQuestTitle("");
-      setActiveQuests([]);
-      setSelectedQuest(null);
-      setEntries([]);
-      setArchivedQuests([]);
-      setQuestPickerOpen(false);
-      setNewQuestFormOpen(false);
-      setCameraOpen(false);
-      setCaptionDraft("");
-      setPendingCaptureUri(null);
-      setPendingImportUri(null);
-      setDailyReminderEnabledState(false);
-      setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
-      setEmojiPickerOpen(false);
-      setSelectedMoment(null);
-      setSelectedMomentReadOnly(false);
-      setMomentMenuOpen(false);
-      setHighlightedMomentId(null);
-      setJourneyPair({ first: null, latest: null });
-      setArchivedQuestView(null);
+      resetAppStateAfterLocalDataClear();
     } catch (error) {
       console.error(error);
       Alert.alert("Delete error", "Your app data could not be deleted. Try one more time.");
     } finally {
       setDeletingAllData(false);
     }
+  }
+
+  function resetAppStateAfterLocalDataClear() {
+    setScreen("home");
+    setQuestTitle("");
+    setActiveQuests([]);
+    setSelectedQuest(null);
+    setEntries([]);
+    setArchivedQuests([]);
+    setQuestPickerOpen(false);
+    setNewQuestFormOpen(false);
+    setCameraOpen(false);
+    setCaptionDraft("");
+    setPendingCaptureUri(null);
+    setPendingImportUri(null);
+    setDailyReminderEnabledState(false);
+    setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
+    setEmojiPickerOpen(false);
+    setSelectedMoment(null);
+    setSelectedMomentReadOnly(false);
+    setMomentMenuOpen(false);
+    setHighlightedMomentId(null);
+    setJourneyPair({ first: null, latest: null });
+    setArchivedQuestView(null);
+  }
+
+  function confirmGenerateDemoData() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    Alert.alert(
+      "Generate Demo Data?",
+      "This will replace local app data on this development build with a screenshot-ready Writer quest.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Generate",
+          onPress: () => void handleGenerateDemoData(),
+        },
+      ]
+    );
+  }
+
+  function confirmGenerateCompletedQuest() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    Alert.alert(
+      "Generate Completed Quest?",
+      "This will add a completed Poet quest to the Trophy Room on this development build.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Generate",
+          onPress: () => void handleGenerateCompletedQuest(),
+        },
+      ]
+    );
+  }
+
+  function confirmClearDemoData() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    Alert.alert(
+      "Clear Demo Data?",
+      "This will clear local quests, photos, reminders, and settings on this development build.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: () => void handleClearDemoData(),
+        },
+      ]
+    );
+  }
+
+  async function handleGenerateDemoData() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      closeReminderTimePicker();
+      await cancelDailyQuestReminder();
+      await deleteAllStoredPhotos();
+      await deleteAllAppData();
+
+      const writerQuest = await createDemoQuestFromSeeds({
+        title: "Writer",
+        emoji: "✍️",
+        status: "active",
+        startedAt: "2026-01-08T18:20:00.000Z",
+        completedAt: null,
+        entries: WRITER_DEMO_ENTRIES,
+      });
+
+      await setLastOpenQuestId(writerQuest.id);
+      setScreen("home");
+      setDailyReminderEnabledState(false);
+      setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
+      setArchivedQuestView(null);
+      await refreshData(writerQuest.id);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "Demo data could not be generated. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function handleGenerateCompletedQuest() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      await createDemoQuestFromSeeds({
+        title: "Poet",
+        emoji: "📝",
+        status: "archived",
+        startedAt: "2026-01-12T19:00:00.000Z",
+        completedAt: "2026-06-08T20:00:00.000Z",
+        entries: POET_DEMO_ENTRIES,
+      });
+
+      setScreen("trophies");
+      setArchivedQuestView(null);
+      await refreshData(selectedQuest?.id);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "The completed demo quest could not be generated. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function handleClearDemoData() {
+    if (generatingDemoData) {
+      return;
+    }
+
+    try {
+      setGeneratingDemoData(true);
+      closeReminderTimePicker();
+      await cancelDailyQuestReminder();
+      await deleteAllStoredPhotos();
+      await deleteAllAppData();
+      resetAppStateAfterLocalDataClear();
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Demo error", "Demo data could not be cleared. Try one more time.");
+    } finally {
+      setGeneratingDemoData(false);
+    }
+  }
+
+  async function createDemoQuestFromSeeds({
+    title,
+    emoji,
+    status,
+    startedAt,
+    completedAt,
+    entries: demoEntries,
+  }: {
+    title: string;
+    emoji: string;
+    status: "active" | "archived";
+    startedAt: string;
+    completedAt: string | null;
+    entries: DemoEntrySeed[];
+  }) {
+    const quest = await createDemoQuest({ title, emoji, status, startedAt, completedAt });
+
+    if (!quest) {
+      throw new Error("Demo quest could not be created.");
+    }
+
+    for (const entry of demoEntries) {
+      const source = Image.resolveAssetSource(entry.imageSource);
+
+      if (!source?.uri) {
+        throw new Error(`Missing demo image for ${entry.filename}.`);
+      }
+
+      const imageUri = await saveDemoAssetPhoto(source.uri, entry.filename);
+      await addDemoEntry({
+        questId: quest.id,
+        imageUri,
+        timestamp: entry.timestamp,
+        isMilestone: entry.isMilestone ?? 0,
+        caption: entry.caption,
+      });
+    }
+
+    return quest;
   }
 
   async function handleEmojiSelect(emoji: string) {
@@ -1438,6 +1773,47 @@ export default function App() {
               <Text style={styles.settingsText}>Version 1.0.0</Text>
               <Text style={styles.settingsText}>Local-first progress journal</Text>
             </View>
+
+            {__DEV__ ? (
+              <View style={styles.demoSection}>
+                <Text style={styles.settingsSectionTitle}>Demo Tools</Text>
+                <Text style={styles.settingsText}>
+                  Development-only data for screenshots, testing, and marketing assets.
+                </Text>
+                <Pressable
+                  onPress={confirmGenerateDemoData}
+                  style={generatingDemoData ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={generatingDemoData}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityLabel="Generate Demo Data"
+                >
+                  <Text style={styles.demoButtonText}>
+                    {generatingDemoData ? "Working..." : "Generate Demo Data"}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmGenerateCompletedQuest}
+                  style={generatingDemoData ? styles.demoButtonDisabled : styles.demoButton}
+                  disabled={generatingDemoData}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityLabel="Generate Completed Quest"
+                >
+                  <Text style={styles.demoButtonText}>Generate Completed Quest</Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmClearDemoData}
+                  style={generatingDemoData ? styles.demoDangerButtonDisabled : styles.demoDangerButton}
+                  disabled={generatingDemoData}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: generatingDemoData }}
+                  accessibilityLabel="Clear Demo Data"
+                >
+                  <Text style={styles.demoDangerButtonText}>Clear Demo Data</Text>
+                </Pressable>
+              </View>
+            ) : null}
 
             <View style={styles.dangerSection}>
               <Text style={styles.dangerSectionTitle}>Danger Zone</Text>
@@ -2465,6 +2841,14 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  demoSection: {
+    backgroundColor: "#f3f7ff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#c9d8ff",
+    padding: 16,
+    gap: 12,
+  },
   dangerSection: {
     backgroundColor: "#fff8f7",
     borderRadius: 8,
@@ -2563,6 +2947,54 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "600",
     lineHeight: 26,
+  },
+  demoButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+  },
+  demoButtonDisabled: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff",
+    opacity: 0.58,
+  },
+  demoButtonText: {
+    color: palette.accent,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  demoDangerButton: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.danger,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+  },
+  demoDangerButtonDisabled: {
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.dangerBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "transparent",
+    opacity: 0.58,
+  },
+  demoDangerButtonText: {
+    color: palette.danger,
+    fontSize: 14,
+    fontWeight: "900",
   },
   dangerButton: {
     alignSelf: "flex-start",
