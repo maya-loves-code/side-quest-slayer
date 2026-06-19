@@ -10,7 +10,12 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export async function scheduleDailyQuestReminder() {
+export type DailyReminderTime = {
+  hour: number;
+  minute: number;
+};
+
+export async function scheduleDailyQuestReminder({ hour, minute }: DailyReminderTime) {
   const permissions = await Notifications.requestPermissionsAsync();
 
   if (!permissions.granted && permissions.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
@@ -25,8 +30,8 @@ export async function scheduleDailyQuestReminder() {
       body: "Did you work on a quest today?",
     },
     trigger: {
-      hour: 20,
-      minute: 0,
+      hour,
+      minute,
       type: Notifications.SchedulableTriggerInputTypes.DAILY,
     },
   });
