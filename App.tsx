@@ -119,6 +119,7 @@ const TILE_SPARKLES = [
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const reminderDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { width } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(true);
@@ -547,12 +548,28 @@ export default function App() {
       return;
     }
 
+    if (Platform.OS === "ios") {
+      if (reminderDebounceRef.current) {
+        clearTimeout(reminderDebounceRef.current);
+      }
+      const reminderEnabled = dailyReminderEnabled;
+      reminderDebounceRef.current = setTimeout(() => {
+        reminderDebounceRef.current = null;
+        void persistReminderTime(nextTime, reminderEnabled);
+      }, 500);
+      return;
+    }
+
+    await persistReminderTime(nextTime, dailyReminderEnabled);
+  }
+
+  async function persistReminderTime(nextTime: string, reminderEnabled: boolean) {
     try {
       setSchedulingReminder(true);
       await setDailyReminderTime(nextTime);
       setDailyReminderTimeState(nextTime);
 
-      if (!dailyReminderEnabled) {
+      if (!reminderEnabled) {
         return;
       }
 
