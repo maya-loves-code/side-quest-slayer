@@ -1504,7 +1504,7 @@ export default function App() {
               <Text style={styles.settingsTitle}>Settings</Text>
             </View>
 
-            <View style={styles.settingsSection}>
+            <View style={styles.settingsReminderSection}>
               <Pressable
                 onPress={() => handleSetDailyReminder(!dailyReminderEnabled)}
                 style={styles.settingsControlRow}
@@ -1514,8 +1514,8 @@ export default function App() {
                 accessibilityLabel="Daily Reminder"
               >
                 <View style={styles.settingsRowText}>
-                  <Text style={styles.settingsRowTitle}>Daily Reminder</Text>
-                  <Text style={styles.settingsRowSubtext}>A reminder to capture today’s progress.</Text>
+                  <Text style={styles.settingsSectionTitle}>Daily Reminder</Text>
+                  <Text style={styles.settingsText}>A reminder to capture today’s progress.</Text>
                 </View>
                 <Switch
                   value={dailyReminderEnabled}
@@ -1530,13 +1530,13 @@ export default function App() {
                 <>
                   <Pressable
                     onPress={openReminderTimePicker}
-                    style={schedulingReminder ? styles.settingsTimeRowDisabled : styles.settingsTimeRow}
+                    style={[styles.settingsTimeRow, schedulingReminder ? styles.settingsTimeRowDisabled : null]}
                     disabled={schedulingReminder}
                     accessibilityRole="button"
                     accessibilityState={{ disabled: schedulingReminder }}
                     accessibilityLabel={`Reminder Time, ${dailyReminderTimeLabel}`}
                   >
-                    <Text style={styles.settingsRowTitle}>Reminder Time</Text>
+                    <Text style={styles.settingsSectionTitle}>Reminder Time</Text>
                     <View style={styles.settingsTimeValueWrap}>
                       <Text style={styles.settingsTimeValue}>{dailyReminderTimeLabel}</Text>
                       <Text style={styles.settingsRowArrow}>›</Text>
@@ -2678,6 +2678,16 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
+  settingsReminderSection: {
+    backgroundColor: "#fbf8ff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+    gap: 18,
+    minHeight: 138,
+  },
   demoSection: {
     backgroundColor: "#f3f7ff",
     borderRadius: 8,
@@ -2710,31 +2720,23 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   settingsControlRow: {
-    minHeight: 52,
+    minHeight: 90,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
   },
   settingsTimeRow: {
-    minHeight: 52,
+    minHeight: 62,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 14,
     borderTopWidth: 1,
     borderTopColor: palette.border,
-    paddingTop: 12,
+    paddingTop: 16,
   },
   settingsTimeRowDisabled: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
-    borderTopWidth: 1,
-    borderTopColor: palette.border,
-    paddingTop: 12,
     opacity: 0.58,
   },
   settingsLinkRow: {
@@ -2749,17 +2751,12 @@ const styles = StyleSheet.create({
   },
   settingsRowText: {
     flex: 1,
-    gap: 3,
+    gap: 6,
   },
   settingsRowTitle: {
     color: palette.ink,
     fontSize: 15,
     fontWeight: "900",
-  },
-  settingsRowSubtext: {
-    color: palette.muted,
-    fontSize: 13,
-    lineHeight: 18,
   },
   settingsTimeValueWrap: {
     flexDirection: "row",
