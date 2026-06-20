@@ -1504,7 +1504,7 @@ export default function App() {
               <Text style={styles.settingsTitle}>Settings</Text>
             </View>
 
-            <View style={styles.settingsReminderSection}>
+            <View style={[styles.settingsSection, styles.settingsReminderSection]}>
               <Pressable
                 onPress={() => handleSetDailyReminder(!dailyReminderEnabled)}
                 style={styles.settingsControlRow}
@@ -2679,10 +2679,6 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   settingsReminderSection: {
-    backgroundColor: "#fbf8ff",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: palette.border,
     paddingHorizontal: 20,
     paddingVertical: 24,
     gap: 18,
