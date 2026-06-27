@@ -193,9 +193,7 @@ export default function App() {
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
   const dailyInspiration = useMemo(() => getDailyInspiration(), [dailyInspirationDateKey]);
   const journeyNote =
-    entries.length === 0
-      ? "Start your journey with your first step."
-      : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
+    entries.length === 0 ? undefined : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
   const localDataOperationInProgress = deletingAllData || generatingDemoData;
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
@@ -1336,7 +1334,7 @@ export default function App() {
                     <Text style={styles.questTitle}>{selectedQuest.title}</Text>
                     <Text style={styles.momentCount}>
                       {entries.length === 0
-                        ? `Take your first step as ${formatQuestIdentity(selectedQuest.title)}`
+                        ? "New quest unlocked."
                         : `${entries.length} ${entries.length === 1 ? "step" : "steps"} into your quest`}
                     </Text>
                   </View>
@@ -1366,7 +1364,7 @@ export default function App() {
                   <View style={styles.emptyScrapbookState}>
                     <DoodleMark variant="star" style={styles.emptyStateStar} />
                     <Text style={styles.emptyTitle}>No steps yet</Text>
-                    <Text style={styles.sectionText}>Take your first step to begin the page.</Text>
+                    <Text style={styles.sectionText}>Log today's step to begin your journey.</Text>
                     <AddTodayTile tileWidth={momentTileWidth} onPress={openCamera} />
                   </View>
                 ) : (
@@ -1393,7 +1391,7 @@ export default function App() {
                     ))}
                   </View>
                 )}
-                <Text style={styles.chainNote}>Keep the chain going</Text>
+                {entries.length > 0 ? <Text style={styles.chainNote}>Keep the chain going</Text> : null}
               </View>
 
               <View style={styles.journeyCard}>
@@ -1838,6 +1836,10 @@ function JourneyPanel({
   entry: JournalEntry | null;
   onPress: (entry: JournalEntry) => void;
 }) {
+  const placeholderText = label.toLowerCase().includes("latest")
+    ? "Your latest step will show here"
+    : "Your first step will show here";
+
   return (
     <View style={styles.bridgePanel}>
       <Text style={styles.bridgeLabel}>{label}</Text>
@@ -1852,7 +1854,7 @@ function JourneyPanel({
         </Pressable>
       ) : (
         <View style={styles.bridgePlaceholder}>
-          <Text style={styles.placeholderText}>Your first step will show here</Text>
+          <Text style={styles.placeholderText}>{placeholderText}</Text>
         </View>
       )}
     </View>
