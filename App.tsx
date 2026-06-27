@@ -9,6 +9,7 @@ import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState 
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   Animated,
   Easing,
   Image,
@@ -53,6 +54,11 @@ import {
   setLastOpenQuestId,
   updateQuestEmoji,
 } from "./src/lib/db";
+import {
+  getDailyInspiration,
+  getLocalDateKey,
+  getMillisecondsUntilNextLocalDay,
+} from "./src/lib/dailyInspiration";
 import { cancelDailyQuestReminder, scheduleDailyQuestReminder } from "./src/lib/notifications";
 import {
   deleteAllStoredPhotos,
@@ -169,6 +175,7 @@ export default function App() {
   const [scrapbookY, setScrapbookY] = useState(0);
   const [journeyPair, setJourneyPair] = useState<JourneyState>({ first: null, latest: null });
   const [archivedQuestView, setArchivedQuestView] = useState<ArchivedQuestView | null>(null);
+  const [dailyInspirationDateKey, setDailyInspirationDateKey] = useState(() => getLocalDateKey());
 
   const activeEmoji = selectedQuest?.emoji ?? getQuestEmoji(selectedQuest?.title ?? "");
   const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
@@ -184,6 +191,7 @@ export default function App() {
   const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
+  const dailyInspiration = useMemo(() => getDailyInspiration(), [dailyInspirationDateKey]);
   const journeyNote =
     entries.length === 0
       ? "Start your journey with your first step."
@@ -193,6 +201,41 @@ export default function App() {
 
   useEffect(() => {
     void bootstrapApp();
+  }, []);
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    function refreshDailyInspiration() {
+      setDailyInspirationDateKey(getLocalDateKey());
+    }
+
+    function scheduleDailyInspirationRefresh() {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+
+      timeoutId = setTimeout(() => {
+        refreshDailyInspiration();
+        scheduleDailyInspirationRefresh();
+      }, getMillisecondsUntilNextLocalDay());
+    }
+
+    scheduleDailyInspirationRefresh();
+
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        refreshDailyInspiration();
+        scheduleDailyInspirationRefresh();
+      }
+    });
+
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      appStateSubscription.remove();
+    };
   }, []);
 
   async function bootstrapApp() {
@@ -1298,9 +1341,7 @@ export default function App() {
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.questIdentityNote}>
-                  {entries.length === 0 ? "Messy first drafts count." : "Keep collecting proof while it is still in progress."}
-                </Text>
+                <DailyInspirationText message={dailyInspiration.message} />
               </View>
 
               <Pressable onPress={openCamera} style={styles.logStepCard} accessibilityLabel="Open camera">
@@ -1900,6 +1941,26 @@ function RecapStat({ label, value }: { label: string; value: string }) {
       <Text style={styles.recapStatValue}>{value}</Text>
       <Text style={styles.recapStatLabel}>{label}</Text>
     </View>
+  );
+}
+
+function DailyInspirationText({ message }: { message: string }) {
+  const fadeProgress = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    fadeProgress.setValue(0);
+    Animated.timing(fadeProgress, {
+      toValue: 1,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [fadeProgress, message]);
+
+  return (
+    <Animated.Text style={[styles.questIdentityNote, { opacity: fadeProgress }]}>
+      {message}
+    </Animated.Text>
   );
 }
 
