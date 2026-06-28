@@ -147,7 +147,7 @@ const ONBOARDING_QUEST_IMAGE = require("./assets/onboarding/quest-journey.png");
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
@@ -199,6 +199,7 @@ export default function App() {
     [archivedQuestView?.entries]
   );
   const momentTileWidth = Math.min(Math.floor((width - 96) / 2), 148);
+  const previewPhotoHeight = Math.min(Math.max(width * 0.7, 240), Math.max(230, height * 0.34));
   const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
@@ -1031,9 +1032,10 @@ export default function App() {
           ) : null}
           {isPreviewingMoment ? (
             <>
-              <View pointerEvents="none" style={styles.momentGradientBase} />
-              <View pointerEvents="none" style={styles.momentGradientTop} />
-              <View pointerEvents="none" style={styles.momentGradientBottom} />
+              <View pointerEvents="none" style={styles.previewPaperBase} />
+              <View pointerEvents="none" style={styles.previewPaperFleckOne} />
+              <View pointerEvents="none" style={styles.previewPaperFleckTwo} />
+              <View pointerEvents="none" style={styles.previewPaperFleckThree} />
             </>
           ) : null}
           <KeyboardAvoidingView
@@ -1041,44 +1043,48 @@ export default function App() {
             keyboardVerticalOffset={0}
             style={isPreviewingMoment ? styles.previewOverlay : styles.cameraOverlay}
           >
-            <View style={styles.cameraHeader}>
-              <Text style={styles.cameraQuestTitle}>
+            <View style={[styles.cameraHeader, isPreviewingMoment ? styles.previewHeader : null]}>
+              <Text style={[styles.cameraQuestTitle, isPreviewingMoment ? styles.previewQuestTitle : null]}>
                 {activeEmoji} {selectedQuest?.title}
               </Text>
               <Pressable
                 onPress={closeCamera}
-                style={styles.cameraCloseButton}
+                style={isPreviewingMoment ? styles.previewCloseButton : styles.cameraCloseButton}
                 accessibilityLabel="Close camera"
               >
-                <Text style={styles.cameraCloseText}>×</Text>
+                <Text style={isPreviewingMoment ? styles.previewCloseText : styles.cameraCloseText}>×</Text>
               </Pressable>
             </View>
             {pendingPreviewUri ? (
               <View style={styles.importPreviewPanel}>
-                <Image source={{ uri: pendingPreviewUri }} style={styles.importPreviewImage} />
-                <View style={styles.cameraCaptionCard}>
+                <View style={styles.importPreviewScrap}>
+                  <View pointerEvents="none" style={styles.importPreviewTape} />
+                  <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
+                  <Image source={{ uri: pendingPreviewUri }} style={[styles.importPreviewImage, { height: previewPhotoHeight }]} />
+                </View>
+                <View style={styles.previewCaptionCard}>
                   <TextInput
                     value={captionDraft}
                     onChangeText={setCaptionDraft}
                     placeholder={captionPlaceholder}
-                    placeholderTextColor="rgba(255, 255, 255, 0.72)"
-                    style={styles.cameraCaptionInput}
+                    placeholderTextColor={palette.pencil}
+                    style={styles.previewCaptionInput}
                     maxLength={CAPTION_CHARACTER_LIMIT}
                     multiline
                     editable={!savingPhoto && !importingPhoto}
                   />
-                  <Text style={styles.cameraCaptionCounter}>
+                  <Text style={styles.previewCaptionCounter}>
                     {captionDraft.length}/{CAPTION_CHARACTER_LIMIT}
                   </Text>
                 </View>
                 <View style={styles.importPreviewActions}>
                   <Pressable
                     onPress={isPendingCapture ? cancelPendingCapture : cancelPendingImport}
-                    style={savingPhoto ? styles.importSecondaryButtonDisabled : styles.importSecondaryButton}
+                    style={savingPhoto ? styles.previewSecondaryButtonDisabled : styles.previewSecondaryButton}
                     disabled={savingPhoto}
                     accessibilityLabel={isPendingCapture ? "Retake photo" : "Choose another photo"}
                   >
-                    <Text style={styles.importSecondaryButtonText}>
+                    <Text style={styles.previewSecondaryButtonText}>
                       {isPendingCapture ? "Retake" : "Choose Again"}
                     </Text>
                   </Pressable>
@@ -1096,7 +1102,7 @@ export default function App() {
                   accessibilityElementsHidden
                   importantForAccessibility="no-hide-descendants"
                 >
-                  <Text style={styles.cameraStatusText}>{savingPhoto ? "Saving..." : " "}</Text>
+                  <Text style={styles.previewStatusText}>{savingPhoto ? "Saving..." : " "}</Text>
                 </View>
               </View>
             ) : (
@@ -1182,9 +1188,10 @@ export default function App() {
         }}
       >
         <View style={styles.momentScreen}>
-          <View pointerEvents="none" style={styles.momentGradientBase} />
-          <View pointerEvents="none" style={styles.momentGradientTop} />
-          <View pointerEvents="none" style={styles.momentGradientBottom} />
+          <View pointerEvents="none" style={styles.previewPaperBase} />
+          <View pointerEvents="none" style={styles.previewPaperFleckOne} />
+          <View pointerEvents="none" style={styles.previewPaperFleckTwo} />
+          <View pointerEvents="none" style={styles.previewPaperFleckThree} />
           <View style={styles.momentTopBar}>
             {selectedMomentReadOnly ? (
               <View style={styles.momentIconButtonPlaceholder} />
@@ -1206,7 +1213,11 @@ export default function App() {
             </Pressable>
           </View>
           {selectedMoment ? (
-            <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption)} />
+            <View style={styles.momentScrap}>
+              <View pointerEvents="none" style={styles.importPreviewTape} />
+              <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
+              <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption)} />
+            </View>
           ) : null}
           {selectedMoment?.caption ? (
             <ScrollView
@@ -1802,7 +1813,12 @@ function DoodleMark({ variant, style }: { variant: "arrow" | "spark" | "star" | 
   const text = variant === "arrow" ? "↘" : variant === "spark" ? "✶" : variant === "star" ? "☆" : "↝";
 
   return (
-    <View pointerEvents="none" style={[styles.doodleMark, style]}>
+    <View
+      pointerEvents="none"
+      style={[styles.doodleMark, style]}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+    >
       <Text style={styles.doodleText}>{text}</Text>
     </View>
   );
@@ -3736,11 +3752,12 @@ const styles = StyleSheet.create({
   },
   previewOverlay: {
     flex: 1,
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
+    justifyContent: "flex-start",
+    paddingHorizontal: 18,
     paddingTop: 70,
-    paddingBottom: 40,
+    paddingBottom: 34,
     backgroundColor: "transparent",
+    gap: 34,
   },
   cameraHeader: {
     flexDirection: "row",
@@ -3767,6 +3784,65 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 32,
     fontWeight: "900",
+  },
+  previewPaperBase: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: palette.paper,
+  },
+  previewPaperFleckOne: {
+    position: "absolute",
+    width: 150,
+    height: 150,
+    left: -48,
+    top: 138,
+    borderRadius: 75,
+    backgroundColor: palette.paperFleck,
+    opacity: 0.58,
+  },
+  previewPaperFleckTwo: {
+    position: "absolute",
+    width: 190,
+    height: 190,
+    right: -72,
+    top: 318,
+    borderRadius: 95,
+    backgroundColor: "rgba(124, 58, 237, 0.07)",
+  },
+  previewPaperFleckThree: {
+    position: "absolute",
+    width: 140,
+    height: 140,
+    left: 34,
+    bottom: 84,
+    borderRadius: 70,
+    backgroundColor: "rgba(216, 199, 255, 0.16)",
+  },
+  previewHeader: {
+    paddingHorizontal: 2,
+  },
+  previewQuestTitle: {
+    color: palette.ink,
+  },
+  previewCloseButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  previewCloseText: {
+    color: palette.ink,
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "700",
   },
   cameraActions: {
     gap: 10,
@@ -3801,16 +3877,78 @@ const styles = StyleSheet.create({
   },
   importPreviewPanel: {
     width: "100%",
-    gap: 10,
+    gap: 14,
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+  },
+  importPreviewScrap: {
+    width: "100%",
+    backgroundColor: palette.photoPaper,
+    borderRadius: 4,
+    padding: 8,
+    paddingBottom: 22,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.42,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+    transform: [{ rotate: "-1.2deg" }],
+  },
+  importPreviewTape: {
+    position: "absolute",
+    top: -9,
+    alignSelf: "center",
+    width: 72,
+    height: 18,
+    borderRadius: 2,
+    backgroundColor: "rgba(233, 217, 183, 0.82)",
+    zIndex: 3,
+    transform: [{ rotate: "2deg" }],
+  },
+  importPreviewDoodle: {
+    right: 12,
+    bottom: 4,
+    opacity: 0.32,
+    transform: [{ rotate: "12deg" }],
   },
   importPreviewImage: {
     width: "100%",
-    height: 220,
-    borderRadius: 8,
+    borderRadius: 3,
     resizeMode: "cover",
-    backgroundColor: "rgba(20, 11, 16, 0.5)",
+    backgroundColor: palette.panel,
+  },
+  previewCaptionCard: {
+    width: "100%",
+    minHeight: 112,
+    backgroundColor: "rgba(255, 254, 249, 0.9)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.16)",
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 10,
+    gap: 8,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+  },
+  previewCaptionInput: {
+    minHeight: 62,
+    maxHeight: 98,
+    color: palette.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: "700",
+    padding: 0,
+    textAlignVertical: "top",
+  },
+  previewCaptionCounter: {
+    color: palette.pencil,
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "right",
   },
   importPreviewActions: {
     width: "100%",
@@ -3861,6 +3999,32 @@ const styles = StyleSheet.create({
   },
   importSecondaryButtonText: {
     color: "#fff",
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  previewSecondaryButton: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewSecondaryButtonDisabled: {
+    flex: 1,
+    minHeight: 50,
+    borderRadius: 8,
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+    opacity: 0.58,
+  },
+  previewSecondaryButtonText: {
+    color: palette.ink,
     fontSize: 15,
     fontWeight: "900",
   },
@@ -3929,6 +4093,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
+  previewStatusText: {
+    color: palette.pencil,
+    fontSize: 13,
+    fontWeight: "800",
+    textAlign: "center",
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: palette.backdrop,
@@ -3968,34 +4138,12 @@ const styles = StyleSheet.create({
   },
   momentScreen: {
     flex: 1,
-    backgroundColor: "#120817",
+    backgroundColor: palette.paper,
     paddingHorizontal: 18,
-    paddingTop: 46,
+    paddingTop: 70,
     paddingBottom: 18,
-    gap: 22,
+    gap: 18,
     overflow: "hidden",
-  },
-  momentGradientBase: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#170d24",
-  },
-  momentGradientTop: {
-    position: "absolute",
-    left: -60,
-    right: -60,
-    top: -180,
-    height: 360,
-    borderRadius: 180,
-    backgroundColor: "rgba(124, 58, 237, 0.18)",
-  },
-  momentGradientBottom: {
-    position: "absolute",
-    left: -80,
-    right: -80,
-    bottom: -220,
-    height: 440,
-    borderRadius: 220,
-    backgroundColor: "rgba(216, 199, 255, 0.09)",
   },
   momentTopBar: {
     zIndex: 2,
@@ -4005,10 +4153,17 @@ const styles = StyleSheet.create({
   momentIconButton: {
     width: 44,
     height: 44,
-    backgroundColor: "rgba(255, 255, 255, 0.16)",
     borderRadius: 8,
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   momentIconButtonPlaceholder: {
     width: 44,
@@ -4018,41 +4173,68 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    backgroundColor: palette.panel,
+    borderWidth: 1,
+    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.24,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   momentCloseText: {
-    color: "#fff",
+    color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
-    fontWeight: "500",
+    fontWeight: "700",
   },
   momentDots: {
-    color: "#fff",
+    color: palette.ink,
     fontSize: 18,
     lineHeight: 20,
     fontWeight: "900",
   },
+  momentScrap: {
+    width: "100%",
+    backgroundColor: palette.photoPaper,
+    borderRadius: 4,
+    padding: 8,
+    paddingBottom: 22,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.42,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+    transform: [{ rotate: "-1deg" }],
+  },
+  momentDetailDoodle: {
+    right: 12,
+    bottom: 4,
+    opacity: 0.32,
+    transform: [{ rotate: "12deg" }],
+  },
   momentImage: {
     width: "100%",
-    borderRadius: 8,
-    resizeMode: "contain",
+    borderRadius: 3,
+    resizeMode: "cover",
+    backgroundColor: palette.panel,
   },
   momentImageNoCaption: {
-    height: "74%",
+    height: 510,
   },
   momentImageShortCaption: {
-    height: "68%",
+    height: 430,
   },
   momentImageMediumCaption: {
-    height: "63%",
+    height: 390,
   },
   momentImageLongCaption: {
-    height: "58%",
+    height: 350,
   },
   momentTimestamp: {
-    color: "rgba(255, 255, 255, 0.58)",
+    color: palette.pencil,
     textAlign: "left",
     fontSize: 12,
     lineHeight: 18,
@@ -4066,25 +4248,35 @@ const styles = StyleSheet.create({
   },
   momentReflectionScroll: {
     width: "100%",
+    backgroundColor: "rgba(255, 254, 249, 0.9)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.16)",
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
   momentReflectionShort: {
-    maxHeight: "16%",
+    maxHeight: 160,
   },
   momentReflectionMedium: {
-    maxHeight: "23%",
+    maxHeight: 210,
   },
   momentReflectionLong: {
-    maxHeight: "30%",
+    maxHeight: 260,
   },
   momentReflectionContent: {
     width: "100%",
     maxWidth: 460,
     alignSelf: "center",
-    paddingHorizontal: 30,
-    paddingBottom: 8,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 12,
   },
   momentCaption: {
-    color: "#fff",
+    color: palette.ink,
     textAlign: "left",
     fontSize: 16,
     lineHeight: 25,
