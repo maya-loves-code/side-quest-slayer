@@ -144,6 +144,10 @@ const QUEST_IDEAS = [
 ];
 const ONBOARDING_QUEST_IMAGE = require("./assets/onboarding/quest-journey.png");
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
@@ -199,7 +203,9 @@ export default function App() {
     [archivedQuestView?.entries]
   );
   const momentTileWidth = Math.min(Math.floor((width - 96) / 2), 148);
-  const previewPhotoHeight = Math.min(Math.max(width * 0.7, 240), Math.max(230, height * 0.34));
+  const previewPhotoMaxHeight = Math.max(230, height * 0.34);
+  const previewPhotoMinHeight = Math.min(240, previewPhotoMaxHeight);
+  const previewPhotoHeight = clamp(width * 0.7, previewPhotoMinHeight, previewPhotoMaxHeight);
   const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
@@ -1216,7 +1222,7 @@ export default function App() {
             <View style={styles.momentScrap}>
               <View pointerEvents="none" style={styles.importPreviewTape} />
               <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
-              <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption)} />
+              <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption, height)} />
             </View>
           ) : null}
           {selectedMoment?.caption ? (
@@ -2358,22 +2364,28 @@ function getQuestDurationLabel(startedAt: string, completedAt: string | null) {
   return `${durationInDays} ${durationInDays === 1 ? "day" : "days"}`;
 }
 
-function getMomentImageStyle(caption: string | null) {
+function getMomentImageStyle(caption: string | null, viewportHeight: number) {
   const captionLength = caption?.trim().length ?? 0;
 
   if (captionLength === 0) {
-    return [styles.momentImage, styles.momentImageNoCaption];
+    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.58, 280, 510) }];
   }
 
   if (captionLength <= 45) {
-    return [styles.momentImage, styles.momentImageShortCaption];
+    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.48, 240, 430) }];
   }
 
   if (captionLength <= 120) {
-    return [styles.momentImage, styles.momentImageMediumCaption];
+    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.43, 220, 390) }];
   }
 
-  return [styles.momentImage, styles.momentImageLongCaption];
+  return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.38, 200, 350) }];
+}
+
+function getResponsiveMomentImageHeight(viewportHeight: number, ratio: number, preferredMin: number, max: number) {
+  const responsiveMax = Math.min(max, Math.max(200, viewportHeight - 230));
+  const effectiveMin = Math.min(preferredMin, responsiveMax);
+  return clamp(viewportHeight * ratio, effectiveMin, responsiveMax);
 }
 
 function getMomentReflectionStyle(caption: string) {
@@ -4220,18 +4232,6 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     resizeMode: "cover",
     backgroundColor: palette.panel,
-  },
-  momentImageNoCaption: {
-    height: 510,
-  },
-  momentImageShortCaption: {
-    height: 430,
-  },
-  momentImageMediumCaption: {
-    height: 390,
-  },
-  momentImageLongCaption: {
-    height: 350,
   },
   momentTimestamp: {
     color: palette.pencil,
