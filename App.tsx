@@ -132,6 +132,17 @@ const TILE_SPARKLES = [
   { id: "bottom-left", left: 64, top: 98, x: -30, y: 36, scale: 0.72, rotate: "8deg", color: palette.accentSoft },
   { id: "bottom-right", left: 88, top: 98, x: 30, y: 34, scale: 0.76, rotate: "-18deg", color: palette.accent },
 ];
+const QUEST_IDEAS = [
+  { emoji: "🍲", title: "Learn to cook" },
+  { emoji: "📣", title: "Join a cheer team" },
+  { emoji: "👟", title: "Run my first marathon" },
+  { emoji: "🐶", title: "Raise a puppy" },
+  { emoji: "🎸", title: "Learn guitar" },
+  { emoji: "📓", title: "Write a book" },
+  { emoji: "🚀", title: "Start my business" },
+  { emoji: "📚", title: "Read 50 books" },
+];
+const ONBOARDING_QUEST_IMAGE = require("./assets/onboarding/quest-journey.png");
 
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
@@ -195,6 +206,8 @@ export default function App() {
   const journeyNote =
     entries.length === 0 ? undefined : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
   const localDataOperationInProgress = deletingAllData || generatingDemoData;
+  const isQuestOnboardingVisible = screen === "home" && !selectedQuest;
+  const isActiveQuestScreenVisible = screen === "home" && Boolean(selectedQuest);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
 
   useEffect(() => {
@@ -1300,7 +1313,14 @@ export default function App() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.container}>
+      <ScrollView
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.container,
+          isQuestOnboardingVisible ? styles.onboardingScrollContainer : null,
+          isActiveQuestScreenVisible ? styles.activeQuestScrollContainer : null,
+        ]}
+      >
         <View pointerEvents="none" style={styles.paperTexture}>
           <View style={styles.paperFleckOne} />
           <View style={styles.paperFleckTwo} />
@@ -1417,28 +1437,13 @@ export default function App() {
               </View>
             </>
           ) : (
-            <View style={styles.onboardingCard}>
-              <Text style={styles.sectionTitle}>Choose Your Quest</Text>
-              <Text style={styles.sectionText}>
-                What do you want to work toward?
-              </Text>
-              <TextInput
-                value={questTitle}
-                onChangeText={setQuestTitle}
-                placeholder="Actor, Dancer, Marathon Runner, Writer..."
-                placeholderTextColor="#8b6f6a"
-                style={styles.input}
-                maxLength={QUEST_TITLE_CHARACTER_LIMIT}
-                editable={!creatingQuest}
-              />
-              <Pressable
-                onPress={handleCreateQuest}
-                style={creatingQuest ? styles.primaryButtonDisabled : styles.primaryButton}
-                disabled={creatingQuest}
-              >
-                <Text style={styles.primaryButtonText}>{creatingQuest ? "Starting..." : "Start This Quest"}</Text>
-              </Pressable>
-            </View>
+            <ChooseQuestOnboarding
+              questTitle={questTitle}
+              creatingQuest={creatingQuest}
+              onQuestTitleChange={setQuestTitle}
+              onChooseIdea={setQuestTitle}
+              onCreateQuest={handleCreateQuest}
+            />
           )
         ) : screen === "trophies" && archivedQuestView ? (
           <View style={styles.archiveDetailArea}>
@@ -1946,6 +1951,108 @@ function RecapStat({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ChooseQuestOnboarding({
+  questTitle,
+  creatingQuest,
+  onQuestTitleChange,
+  onChooseIdea,
+  onCreateQuest,
+}: {
+  questTitle: string;
+  creatingQuest: boolean;
+  onQuestTitleChange: (title: string) => void;
+  onChooseIdea: (title: string) => void;
+  onCreateQuest: () => void;
+}) {
+  return (
+    <View style={styles.questOnboarding}>
+      <View style={styles.questOnboardingHero}>
+        <View style={styles.questOnboardingCopy}>
+          <Text style={styles.questOnboardingBurst}>✦</Text>
+          <Text style={styles.questOnboardingTitle}>
+            Choose{"\n"}
+            <Text style={styles.questOnboardingTitleAccent}>Your Quest</Text>
+          </Text>
+          <Text style={styles.questOnboardingIntro}>
+            What do you want to work toward? Build a visual record of{" "}
+            your <Text style={styles.questOnboardingUnderline}>unique journey.</Text>
+          </Text>
+        </View>
+
+        <View style={styles.questPolaroid}>
+          <View pointerEvents="none" style={styles.questPolaroidTape} />
+          <Text pointerEvents="none" style={styles.questPolaroidStar}>☆</Text>
+          <Image source={ONBOARDING_QUEST_IMAGE} style={styles.questPolaroidImage} />
+          <Text style={styles.questPolaroidCaption}>find joy in{"\n"}the journey ♡</Text>
+        </View>
+      </View>
+
+      <View style={styles.questOnboardingFormCard}>
+        <Text style={styles.questOnboardingFormTitle}>What’s your quest? <Text style={styles.questFormSpark}>✧</Text></Text>
+        <TextInput
+          value={questTitle}
+          onChangeText={onQuestTitleChange}
+          placeholder="e.g. Build an app"
+          placeholderTextColor="rgba(95, 86, 104, 0.48)"
+          style={styles.questOnboardingInput}
+          maxLength={QUEST_TITLE_CHARACTER_LIMIT}
+          editable={!creatingQuest}
+          returnKeyType="done"
+        />
+        <View style={styles.questOnboardingHelperRow}>
+          <Text style={styles.questOnboardingArrow}>↝</Text>
+          <Text style={styles.questOnboardingHelper}>Be specific or keep it simple.{"\n"}This is your journey.</Text>
+        </View>
+
+        <View pointerEvents="none" style={styles.questFormTape} />
+        <Text style={styles.questIdeasTitle}>Need ideas? Here are a few:</Text>
+        <View style={styles.questIdeaGrid}>
+          {QUEST_IDEAS.map((idea) => (
+            <Pressable
+              key={idea.title}
+              onPress={() => onChooseIdea(idea.title)}
+              style={styles.questIdeaChip}
+              disabled={creatingQuest}
+              accessibilityRole="button"
+              accessibilityLabel={`Use quest idea ${idea.title}`}
+            >
+              <Text style={styles.questIdeaEmoji}>{idea.emoji}</Text>
+              <Text style={styles.questIdeaText}>{idea.title}</Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.questCreateOwn}>Or create your own. Anything that matters to you. ♡</Text>
+      </View>
+
+      <Pressable
+        onPress={onCreateQuest}
+        style={creatingQuest ? styles.questOnboardingButtonDisabled : styles.questOnboardingButton}
+        disabled={creatingQuest}
+      >
+        <Text style={styles.questOnboardingButtonText}>{creatingQuest ? "Starting..." : "Start My Quest"}</Text>
+        <Text style={styles.questOnboardingButtonArrow}>→</Text>
+      </Pressable>
+
+      <View style={styles.questOnboardingFooter}>
+        <View style={styles.questFooterIconWrap}>
+          <View style={styles.questFooterPolaroidBack}>
+            <View style={styles.questFooterPolaroidPhoto} />
+          </View>
+          <View style={styles.questFooterPolaroidFront}>
+            <View style={styles.questFooterPolaroidPhoto} />
+          </View>
+        </View>
+        <View style={styles.questFooterCopy}>
+          <Text style={styles.questFooterTitle}>You can have multiple quests.</Text>
+          <Text style={styles.questFooterText}>
+            Focus on one today, switch <Text style={styles.questFooterUnderline}>anytime.</Text>
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function DailyInspirationText({ message }: { message: string }) {
   const fadeProgress = useRef(new Animated.Value(1)).current;
 
@@ -2446,6 +2553,12 @@ const styles = StyleSheet.create({
     paddingBottom: 168,
     gap: 18,
   },
+  onboardingScrollContainer: {
+    paddingBottom: 96,
+  },
+  activeQuestScrollContainer: {
+    paddingBottom: 104,
+  },
   paperTexture: {
     ...StyleSheet.absoluteFillObject,
     overflow: "hidden",
@@ -2498,6 +2611,334 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: palette.ink,
     fontWeight: "900",
+  },
+  questOnboarding: {
+    gap: 16,
+    paddingTop: 12,
+    paddingBottom: 0,
+    overflow: "hidden",
+  },
+  questOnboardingHero: {
+    minHeight: 0,
+    gap: 14,
+  },
+  questOnboardingCopy: {
+    paddingHorizontal: 18,
+    paddingTop: 48,
+    gap: 12,
+  },
+  questOnboardingBurst: {
+    position: "absolute",
+    left: 2,
+    top: 22,
+    color: palette.accent,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "600",
+    opacity: 0.82,
+    transform: [{ rotate: "-10deg" }],
+  },
+  questOnboardingTitle: {
+    color: palette.ink,
+    fontSize: 48,
+    lineHeight: 50,
+    fontWeight: "900",
+    letterSpacing: 0,
+  },
+  questOnboardingTitleAccent: {
+    color: palette.accentDark,
+  },
+  questOnboardingIntro: {
+    color: palette.ink,
+    fontSize: 20,
+    lineHeight: 30,
+    fontWeight: "500",
+    maxWidth: 330,
+  },
+  questOnboardingUnderline: {
+    color: palette.accentDark,
+    textDecorationLine: "underline",
+    textDecorationColor: palette.accent,
+  },
+  questPolaroid: {
+    width: 222,
+    alignSelf: "center",
+    backgroundColor: palette.photoPaper,
+    padding: 12,
+    paddingBottom: 20,
+    marginTop: 0,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  questPolaroidTape: {
+    position: "absolute",
+    top: -12,
+    alignSelf: "center",
+    width: 84,
+    height: 18,
+    backgroundColor: "rgba(233, 217, 183, 0.68)",
+    borderRadius: 2,
+    zIndex: 3,
+    transform: [{ rotate: "-2deg" }],
+  },
+  questPolaroidStar: {
+    position: "absolute",
+    left: -16,
+    top: 10,
+    zIndex: 4,
+    color: "rgba(124, 58, 237, 0.58)",
+    fontSize: 44,
+    lineHeight: 48,
+    fontWeight: "400",
+    transform: [{ rotate: "-12deg" }],
+  },
+  questPolaroidImage: {
+    width: "100%",
+    height: 166,
+    resizeMode: "cover",
+  },
+  questPolaroidCaption: {
+    color: palette.ink,
+    fontSize: 18,
+    lineHeight: 26,
+    fontStyle: "italic",
+    fontWeight: "500",
+    paddingTop: 14,
+    textAlign: "center",
+    transform: [{ rotate: "-2deg" }],
+  },
+  questOnboardingFormCard: {
+    position: "relative",
+    backgroundColor: "rgba(251, 248, 255, 0.76)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.14)",
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
+    gap: 12,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  questOnboardingFormTitle: {
+    color: palette.ink,
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  questFormSpark: {
+    color: "rgba(124, 58, 237, 0.48)",
+    fontSize: 28,
+  },
+  questOnboardingInput: {
+    minHeight: 68,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: "rgba(124, 58, 237, 0.42)",
+    backgroundColor: "rgba(255, 254, 249, 0.84)",
+    paddingHorizontal: 18,
+    color: palette.ink,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: "600",
+  },
+  questOnboardingHelperRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    paddingLeft: 34,
+  },
+  questOnboardingArrow: {
+    color: "rgba(124, 58, 237, 0.48)",
+    fontSize: 30,
+    lineHeight: 34,
+    transform: [{ rotate: "28deg" }],
+  },
+  questOnboardingHelper: {
+    color: palette.accentDark,
+    fontSize: 16,
+    lineHeight: 25,
+    fontStyle: "italic",
+    fontWeight: "500",
+  },
+  questFormTape: {
+    position: "absolute",
+    right: -18,
+    top: 306,
+    width: 106,
+    height: 20,
+    backgroundColor: "rgba(188, 155, 255, 0.48)",
+    borderRadius: 2,
+    transform: [{ rotate: "11deg" }],
+  },
+  questIdeasTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "900",
+    marginTop: 10,
+  },
+  questIdeaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
+  },
+  questIdeaChip: {
+    width: "48%",
+    minHeight: 60,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.13)",
+    backgroundColor: "rgba(255, 254, 249, 0.62)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  questIdeaEmoji: {
+    width: 24,
+    fontSize: 19,
+    textAlign: "center",
+  },
+  questIdeaText: {
+    flex: 1,
+    color: palette.accentDark,
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: "700",
+  },
+  questCreateOwn: {
+    color: palette.accentDark,
+    fontSize: 15,
+    lineHeight: 22,
+    fontStyle: "italic",
+    fontWeight: "500",
+    textAlign: "center",
+    paddingTop: 4,
+  },
+  questOnboardingButton: {
+    minHeight: 78,
+    borderRadius: 8,
+    backgroundColor: palette.accent,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 48,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.36,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  questOnboardingButtonDisabled: {
+    minHeight: 78,
+    borderRadius: 8,
+    backgroundColor: "rgba(124, 58, 237, 0.62)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 48,
+    opacity: 0.68,
+  },
+  questOnboardingButtonText: {
+    color: "#fff",
+    fontSize: 24,
+    lineHeight: 30,
+    fontWeight: "900",
+  },
+  questOnboardingButtonArrow: {
+    color: "#fff",
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: "300",
+  },
+  questOnboardingFooter: {
+    position: "relative",
+    minHeight: 88,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+  },
+  questFooterIconWrap: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: "rgba(124, 58, 237, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  questFooterPolaroidBack: {
+    position: "absolute",
+    width: 31,
+    height: 38,
+    borderRadius: 4,
+    backgroundColor: palette.photoPaper,
+    borderWidth: 2,
+    borderColor: "rgba(124, 58, 237, 0.62)",
+    padding: 4,
+    paddingBottom: 10,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    transform: [{ translateX: -7 }, { translateY: -5 }, { rotate: "-9deg" }],
+  },
+  questFooterPolaroidFront: {
+    position: "absolute",
+    width: 31,
+    height: 38,
+    borderRadius: 4,
+    backgroundColor: palette.photoPaper,
+    borderWidth: 2,
+    borderColor: palette.accentDark,
+    padding: 4,
+    paddingBottom: 10,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 4 },
+    transform: [{ translateX: 7 }, { translateY: 4 }, { rotate: "10deg" }],
+  },
+  questFooterPolaroidPhoto: {
+    flex: 1,
+    borderRadius: 2,
+    backgroundColor: "rgba(124, 58, 237, 0.16)",
+  },
+  questFooterCopy: {
+    flex: 1,
+    gap: 2,
+    zIndex: 2,
+  },
+  questFooterTitle: {
+    color: palette.ink,
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: "900",
+  },
+  questFooterText: {
+    color: palette.ink,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "500",
+  },
+  questFooterUnderline: {
+    textDecorationLine: "underline",
+    textDecorationColor: palette.accent,
   },
   onboardingCard: {
     backgroundColor: palette.card,
