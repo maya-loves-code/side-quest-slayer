@@ -210,8 +210,6 @@ export default function App() {
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
   const dailyInspiration = useMemo(() => getDailyInspiration(), [dailyInspirationDateKey]);
-  const journeyNote =
-    entries.length === 0 ? undefined : `You showed up ${entries.length} ${entries.length === 1 ? "time" : "times"}.`;
   const localDataOperationInProgress = deletingAllData || generatingDemoData;
   const isQuestOnboardingVisible = screen === "home" && !selectedQuest;
   const isActiveQuestScreenVisible = screen === "home" && Boolean(selectedQuest);
@@ -1396,7 +1394,7 @@ export default function App() {
                 onLayout={(event) => setScrapbookY(event.nativeEvent.layout.y)}
                 style={styles.scrapbookArea}
               >
-                <ScrapbookHeader title="Your Journey" note={journeyNote} />
+                <ScrapbookHeader title="Your Journey" />
                 {entries.length === 0 ? (
                   <View style={styles.emptyScrapbookState}>
                     <DoodleMark variant="star" style={styles.emptyStateStar} />
