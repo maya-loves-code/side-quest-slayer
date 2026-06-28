@@ -1968,7 +1968,13 @@ function ChooseQuestOnboarding({
     <View style={styles.questOnboarding}>
       <View style={styles.questOnboardingHero}>
         <View style={styles.questOnboardingCopy}>
-          <Text style={styles.questOnboardingBurst}>✦</Text>
+          <Text
+            style={styles.questOnboardingBurst}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            ✦
+          </Text>
           <Text style={styles.questOnboardingTitle}>
             Choose{"\n"}
             <Text style={styles.questOnboardingTitleAccent}>Your Quest</Text>
@@ -1981,14 +1987,30 @@ function ChooseQuestOnboarding({
 
         <View style={styles.questPolaroid}>
           <View pointerEvents="none" style={styles.questPolaroidTape} />
-          <Text pointerEvents="none" style={styles.questPolaroidStar}>☆</Text>
+          <Text
+            pointerEvents="none"
+            style={styles.questPolaroidStar}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            ☆
+          </Text>
           <Image source={ONBOARDING_QUEST_IMAGE} style={styles.questPolaroidImage} />
           <Text style={styles.questPolaroidCaption}>find joy in{"\n"}the journey ♡</Text>
         </View>
       </View>
 
       <View style={styles.questOnboardingFormCard}>
-        <Text style={styles.questOnboardingFormTitle}>What’s your quest? <Text style={styles.questFormSpark}>✧</Text></Text>
+        <Text style={styles.questOnboardingFormTitle}>
+          What’s your quest?{" "}
+          <Text
+            style={styles.questFormSpark}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            ✧
+          </Text>
+        </Text>
         <TextInput
           value={questTitle}
           onChangeText={onQuestTitleChange}
@@ -2000,7 +2022,13 @@ function ChooseQuestOnboarding({
           returnKeyType="done"
         />
         <View style={styles.questOnboardingHelperRow}>
-          <Text style={styles.questOnboardingArrow}>↝</Text>
+          <Text
+            style={styles.questOnboardingArrow}
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+          >
+            ↝
+          </Text>
           <Text style={styles.questOnboardingHelper}>Be specific or keep it simple.{"\n"}This is your journey.</Text>
         </View>
 
@@ -2028,9 +2056,17 @@ function ChooseQuestOnboarding({
         onPress={onCreateQuest}
         style={creatingQuest ? styles.questOnboardingButtonDisabled : styles.questOnboardingButton}
         disabled={creatingQuest}
+        accessibilityRole="button"
+        accessibilityLabel={creatingQuest ? "Starting quest" : "Start my quest"}
       >
         <Text style={styles.questOnboardingButtonText}>{creatingQuest ? "Starting..." : "Start My Quest"}</Text>
-        <Text style={styles.questOnboardingButtonArrow}>→</Text>
+        <Text
+          style={styles.questOnboardingButtonArrow}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          →
+        </Text>
       </Pressable>
 
       <View style={styles.questOnboardingFooter}>
