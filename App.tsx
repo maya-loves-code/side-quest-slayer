@@ -1480,23 +1480,27 @@ export default function App() {
               </Text>
               <Text style={styles.recapSubtitle}>You made this chapter real.</Text>
               <View style={styles.recapStatsGrid}>
-                <RecapStat
-                  label="Steps"
-                  value={`${archivedQuestView.entries.length}`}
-                />
+                {archivedQuestView.entries.length > 0 ? (
+                  <RecapStat
+                    label="Steps"
+                    value={`${archivedQuestView.entries.length}`}
+                  />
+                ) : null}
                 <RecapStat label="Started" value={formatDate(archivedQuestView.quest.startedAt)} />
                 <RecapStat label="Finished" value={formatDate(archivedQuestView.quest.completedAt)} />
                 <RecapStat label="Duration" value={archivedQuestView.durationLabel} />
               </View>
             </View>
 
-            <View style={styles.journeyCard}>
-              <Text style={styles.sectionTitle}>From Then to Now</Text>
-              <View style={styles.bridgeRow}>
-                <JourneyPanel label="First Step" entry={archivedQuestView.firstEntry} onPress={(entry) => openMoment(entry, true)} />
-                <JourneyPanel label="Latest Step" entry={archivedQuestView.latestEntry} onPress={(entry) => openMoment(entry, true)} />
+            {archivedQuestView.entries.length > 0 ? (
+              <View style={styles.journeyCard}>
+                <Text style={styles.sectionTitle}>From Then to Now</Text>
+                <View style={styles.bridgeRow}>
+                  <JourneyPanel label="First Step" entry={archivedQuestView.firstEntry} onPress={(entry) => openMoment(entry, true)} />
+                  <JourneyPanel label="Latest Step" entry={archivedQuestView.latestEntry} onPress={(entry) => openMoment(entry, true)} />
+                </View>
               </View>
-            </View>
+            ) : null}
 
             {archivedQuestView.captionHighlights.length > 0 ? (
               <View style={styles.recapHighlightsCard}>
@@ -1947,11 +1951,7 @@ function TrophyCard({
             <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
           </View>
         </>
-      ) : (
-        <View style={styles.trophyStatsRow}>
-          <Text style={styles.trophyStatText}>{summary.durationLabel}</Text>
-        </View>
-      )}
+      ) : null}
     </Pressable>
   );
 }
