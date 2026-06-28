@@ -1061,26 +1061,33 @@ export default function App() {
             </View>
             {pendingPreviewUri ? (
               <View style={styles.importPreviewPanel}>
-                <View style={styles.importPreviewScrap}>
-                  <View pointerEvents="none" style={styles.importPreviewTape} />
-                  <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
-                  <Image source={{ uri: pendingPreviewUri }} style={[styles.importPreviewImage, { height: previewPhotoHeight }]} />
-                </View>
-                <View style={styles.previewCaptionCard}>
-                  <TextInput
-                    value={captionDraft}
-                    onChangeText={setCaptionDraft}
-                    placeholder={captionPlaceholder}
-                    placeholderTextColor={palette.pencil}
-                    style={styles.previewCaptionInput}
-                    maxLength={CAPTION_CHARACTER_LIMIT}
-                    multiline
-                    editable={!savingPhoto && !importingPhoto}
-                  />
-                  <Text style={styles.previewCaptionCounter}>
-                    {captionDraft.length}/{CAPTION_CHARACTER_LIMIT}
-                  </Text>
-                </View>
+                <ScrollView
+                  style={styles.importPreviewScroll}
+                  contentContainerStyle={styles.importPreviewScrollContent}
+                  keyboardShouldPersistTaps="handled"
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.importPreviewScrap}>
+                    <View pointerEvents="none" style={styles.importPreviewTape} />
+                    <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
+                    <Image source={{ uri: pendingPreviewUri }} style={[styles.importPreviewImage, { height: previewPhotoHeight }]} />
+                  </View>
+                  <View style={styles.previewCaptionCard}>
+                    <TextInput
+                      value={captionDraft}
+                      onChangeText={setCaptionDraft}
+                      placeholder={captionPlaceholder}
+                      placeholderTextColor={palette.pencil}
+                      style={styles.previewCaptionInput}
+                      maxLength={CAPTION_CHARACTER_LIMIT}
+                      multiline
+                      editable={!savingPhoto && !importingPhoto}
+                    />
+                    <Text style={styles.previewCaptionCounter}>
+                      {captionDraft.length}/{CAPTION_CHARACTER_LIMIT}
+                    </Text>
+                  </View>
+                </ScrollView>
                 <View style={styles.importPreviewActions}>
                   <Pressable
                     onPress={isPendingCapture ? cancelPendingCapture : cancelPendingImport}
@@ -3765,9 +3772,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     paddingHorizontal: 18,
     paddingTop: 70,
-    paddingBottom: 34,
+    paddingBottom: 22,
     backgroundColor: "transparent",
-    gap: 34,
+    gap: 18,
   },
   cameraHeader: {
     flexDirection: "row",
@@ -3886,10 +3893,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   importPreviewPanel: {
+    flex: 1,
     width: "100%",
-    gap: 14,
+    minHeight: 0,
+    gap: 12,
     alignItems: "center",
     justifyContent: "flex-start",
+  },
+  importPreviewScroll: {
+    width: "100%",
+    flex: 1,
+    minHeight: 0,
+  },
+  importPreviewScrollContent: {
+    gap: 14,
+    paddingTop: 8,
+    paddingBottom: 12,
   },
   importPreviewScrap: {
     width: "100%",
@@ -3964,6 +3983,7 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     gap: 10,
+    paddingTop: 2,
   },
   importPrimaryButton: {
     flex: 1,
