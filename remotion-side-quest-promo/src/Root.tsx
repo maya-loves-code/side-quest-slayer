@@ -1,4 +1,5 @@
 import "./index.css";
+import type { FC } from "react";
 import { Composition } from "remotion";
 import {
   SideQuestSlayerPhonePromo,
@@ -8,7 +9,7 @@ import {
 const fps = 30;
 const durationInFrames = fps * 5;
 
-export const RemotionRoot: React.FC = () => {
+export const RemotionRoot: FC = () => {
   return (
     <>
       <Composition
