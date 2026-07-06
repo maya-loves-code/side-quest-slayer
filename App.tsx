@@ -1296,21 +1296,27 @@ export default function App() {
             </Pressable>
           </View>
           {selectedMoment ? (
-            <Pressable
-              onPress={() => openPhotoViewer(selectedMoment.imageUri)}
-              style={styles.momentScrap}
-              accessibilityRole="imagebutton"
-              accessibilityLabel="Open full photo preview"
+            <ScrollView
+              style={styles.momentContentScroll}
+              contentContainerStyle={styles.momentContent}
+              showsVerticalScrollIndicator={false}
             >
-              <View pointerEvents="none" style={styles.importPreviewTape} />
-              <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
-              <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
-                <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
-              </View>
-              <Text style={styles.momentPolaroidTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => openPhotoViewer(selectedMoment.imageUri)}
+                style={styles.momentScrap}
+                accessibilityRole="imagebutton"
+                accessibilityLabel="Open full photo preview"
+              >
+                <View pointerEvents="none" style={styles.importPreviewTape} />
+                <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
+                <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
+                  <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
+                </View>
+                <Text style={styles.momentPolaroidTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
+              </Pressable>
+              {selectedMoment.caption?.trim() ? <MomentJournalEntry caption={selectedMoment.caption} /> : null}
+            </ScrollView>
           ) : null}
-          {selectedMoment?.caption?.trim() ? <MomentJournalEntry caption={selectedMoment.caption} /> : null}
           {momentMenuOpen && !selectedMomentReadOnly ? (
             <View style={styles.momentMenu}>
               {selectedMoment?.caption ? (
@@ -2055,7 +2061,7 @@ function TrophyCard({
           accessibilityLabel="Delete Quest"
           accessibilityState={{ disabled: deleteDisabled }}
         >
-          <MaterialCommunityIcons name="dots-horizontal" size={22} color="#211c2f" />
+          <MaterialCommunityIcons name="dots-horizontal" size={22} color={palette.ink} />
         </Pressable>
       </View>
 
@@ -3954,7 +3960,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   previewCloseText: {
-    color: "#211c2f",
+    color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
     fontWeight: "800",
@@ -4285,6 +4291,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  momentContentScroll: {
+    flex: 1,
+    width: "100%",
+  },
+  momentContent: {
+    gap: 12,
+    paddingBottom: 8,
+  },
   momentIconButton: {
     width: 44,
     height: 44,
@@ -4302,13 +4316,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   momentCloseText: {
-    color: "#211c2f",
+    color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
     fontWeight: "800",
   },
   momentDots: {
-    color: "#211c2f",
+    color: palette.ink,
     fontSize: 24,
     lineHeight: 26,
     fontWeight: "900",
@@ -4335,7 +4349,7 @@ const styles = StyleSheet.create({
   },
   momentPolaroidTimestamp: {
     alignSelf: "flex-start",
-    color: "#1f1b2e",
+    color: palette.ink,
     fontFamily: Platform.select({
       ios: "Noteworthy",
       android: "casual",
@@ -4410,7 +4424,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoViewerCloseText: {
-    color: "#211c2f",
+    color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
     fontWeight: "800",
@@ -4446,7 +4460,7 @@ const styles = StyleSheet.create({
     transform: [{ rotate: "0.3deg" }],
   },
   momentJournalText: {
-    color: "#211c2f",
+    color: palette.ink,
     fontFamily: Platform.select({
       ios: "Noteworthy",
       android: "serif",
