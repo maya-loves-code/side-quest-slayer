@@ -4297,6 +4297,7 @@ const styles = StyleSheet.create({
   },
   momentContent: {
     gap: 12,
+    paddingTop: 12,
     paddingBottom: 8,
   },
   momentIconButton: {
