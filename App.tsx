@@ -1393,8 +1393,12 @@ export default function App() {
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
-              style={styles.questSheetList}
+              style={[
+                styles.questSheetList,
+                { maxHeight: Math.min(430, Math.max(320, height * 0.48)) },
+              ]}
               contentContainerStyle={styles.questSheetListContent}
+              showsVerticalScrollIndicator={false}
             >
               {activeQuests.map((quest) => {
                 const isSelected = quest.id === selectedQuest?.id;
