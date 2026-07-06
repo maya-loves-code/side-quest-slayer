@@ -212,6 +212,15 @@ export default function App() {
     inputRange: [0, 1],
     outputRange: [0, 1],
   });
+  const photoViewerZoomProps =
+    Platform.OS === "ios"
+      ? {
+          maximumZoomScale: 4,
+          minimumZoomScale: 1,
+          centerContent: true,
+          bouncesZoom: true,
+        }
+      : {};
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
   const archivedMomentSections = useMemo(
     () => createMomentSections(archivedQuestView?.entries ?? []),
@@ -1367,12 +1376,9 @@ export default function App() {
                       },
                     ]}
                     contentContainerStyle={styles.photoViewerScrollContent}
-                    maximumZoomScale={4}
-                    minimumZoomScale={1}
-                    centerContent
-                    bouncesZoom
                     showsHorizontalScrollIndicator={false}
                     showsVerticalScrollIndicator={false}
+                    {...photoViewerZoomProps}
                   >
                     <Image
                       source={{ uri: photoViewerUri }}
