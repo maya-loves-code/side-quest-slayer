@@ -151,6 +151,8 @@ function clamp(value: number, min: number, max: number) {
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
+  const importPreviewScrollRef = useRef<ScrollView | null>(null);
+  const photoViewerProgress = useRef(new Animated.Value(0)).current;
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(true);
@@ -184,6 +186,7 @@ export default function App() {
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
   const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
+  const [photoViewerUri, setPhotoViewerUri] = useState<string | null>(null);
   const [momentMenuOpen, setMomentMenuOpen] = useState(false);
   const [highlightedMomentId, setHighlightedMomentId] = useState<number | null>(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
@@ -197,6 +200,27 @@ export default function App() {
   const pendingPreviewUri = pendingCaptureUri ?? pendingImportUri;
   const isPreviewingMoment = Boolean(pendingPreviewUri);
   const isPendingCapture = Boolean(pendingCaptureUri);
+  const photoViewerBackdropOpacity = photoViewerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const photoViewerImageScale = photoViewerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.92, 1],
+  });
+  const photoViewerImageOpacity = photoViewerProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const photoViewerZoomProps =
+    Platform.OS === "ios"
+      ? {
+          maximumZoomScale: 4,
+          minimumZoomScale: 1,
+          centerContent: true,
+          bouncesZoom: true,
+        }
+      : {};
   const momentSections = useMemo(() => createMomentSections(entries), [entries]);
   const archivedMomentSections = useMemo(
     () => createMomentSections(archivedQuestView?.entries ?? []),
@@ -412,6 +436,43 @@ export default function App() {
     } finally {
       setImportingPhoto(false);
     }
+  }
+
+  function handlePreviewCaptionFocus() {
+    setTimeout(() => {
+      importPreviewScrollRef.current?.scrollToEnd({ animated: true });
+    }, 120);
+  }
+
+  function openPhotoViewer(uri: string) {
+    setMomentMenuOpen(false);
+    photoViewerProgress.setValue(0);
+    setPhotoViewerUri(uri);
+    requestAnimationFrame(() => {
+      Animated.timing(photoViewerProgress, {
+        toValue: 1,
+        duration: 280,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    });
+  }
+
+  function closePhotoViewer() {
+    if (!photoViewerUri) {
+      return;
+    }
+
+    Animated.timing(photoViewerProgress, {
+      toValue: 0,
+      duration: 240,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (finished) {
+        setPhotoViewerUri(null);
+      }
+    });
   }
 
   async function handleSaveCapturedPhoto() {
@@ -1062,20 +1123,25 @@ export default function App() {
             {pendingPreviewUri ? (
               <View style={styles.importPreviewPanel}>
                 <ScrollView
+                  ref={importPreviewScrollRef}
                   style={styles.importPreviewScroll}
                   contentContainerStyle={styles.importPreviewScrollContent}
+                  keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
                   <View style={styles.importPreviewScrap}>
                     <View pointerEvents="none" style={styles.importPreviewTape} />
                     <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
-                    <Image source={{ uri: pendingPreviewUri }} style={[styles.importPreviewImage, { height: previewPhotoHeight }]} />
+                    <View style={[styles.proofPhotoFrame, { height: previewPhotoHeight }]}>
+                      <Image source={{ uri: pendingPreviewUri }} style={styles.proofPhotoImage} />
+                    </View>
                   </View>
                   <View style={styles.previewCaptionCard}>
                     <TextInput
                       value={captionDraft}
                       onChangeText={setCaptionDraft}
+                      onFocus={handlePreviewCaptionFocus}
                       placeholder={captionPlaceholder}
                       placeholderTextColor={palette.pencil}
                       style={styles.previewCaptionInput}
@@ -1193,6 +1259,11 @@ export default function App() {
         animationType="fade"
         visible={!!selectedMoment}
         onRequestClose={() => {
+          if (photoViewerUri) {
+            closePhotoViewer();
+            return;
+          }
+
           setMomentMenuOpen(false);
           setSelectedMoment(null);
           setSelectedMomentReadOnly(false);
@@ -1213,6 +1284,7 @@ export default function App() {
             )}
             <Pressable
               onPress={() => {
+                setPhotoViewerUri(null);
                 setMomentMenuOpen(false);
                 setSelectedMoment(null);
                 setSelectedMomentReadOnly(false);
@@ -1224,11 +1296,18 @@ export default function App() {
             </Pressable>
           </View>
           {selectedMoment ? (
-            <View style={styles.momentScrap}>
+            <Pressable
+              onPress={() => openPhotoViewer(selectedMoment.imageUri)}
+              style={styles.momentScrap}
+              accessibilityRole="imagebutton"
+              accessibilityLabel="Open full photo preview"
+            >
               <View pointerEvents="none" style={styles.importPreviewTape} />
               <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
-              <Image source={{ uri: selectedMoment.imageUri }} style={getMomentImageStyle(selectedMoment.caption, height)} />
-            </View>
+              <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
+                <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
+              </View>
+            </Pressable>
           ) : null}
           {selectedMoment?.caption ? (
             <ScrollView
@@ -1259,6 +1338,56 @@ export default function App() {
                 <Text style={styles.deleteMomentText}>{deletingMoment ? "Deleting..." : "Delete moment"}</Text>
               </Pressable>
             </View>
+          ) : null}
+          {photoViewerUri ? (
+            <Animated.View style={[styles.photoViewerScreen, { opacity: photoViewerBackdropOpacity }]}>
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={closePhotoViewer}
+                accessibilityLabel="Close full photo preview"
+              />
+              <View pointerEvents="none" style={styles.photoViewerGlowTop} />
+              <View pointerEvents="none" style={styles.photoViewerGlowBottom} />
+              <View pointerEvents="none" style={styles.photoViewerPaperFleckOne} />
+              <View pointerEvents="none" style={styles.photoViewerPaperFleckTwo} />
+              <SafeAreaView pointerEvents="box-none" style={styles.photoViewerSafeArea}>
+                <Pressable
+                  onPress={closePhotoViewer}
+                  style={styles.photoViewerCloseButton}
+                  accessibilityLabel="Close full photo preview"
+                >
+                  <Text style={styles.photoViewerCloseText}>×</Text>
+                </Pressable>
+                <Animated.View
+                  style={[
+                    styles.photoViewerStage,
+                    {
+                      opacity: photoViewerImageOpacity,
+                      transform: [{ scale: photoViewerImageScale }],
+                    },
+                  ]}
+                >
+                  <ScrollView
+                    style={[
+                      styles.photoViewerScroll,
+                      {
+                        width: Math.max(300, width - 24),
+                        height: Math.max(340, height - 132),
+                      },
+                    ]}
+                    contentContainerStyle={styles.photoViewerScrollContent}
+                    showsHorizontalScrollIndicator={false}
+                    showsVerticalScrollIndicator={false}
+                    {...photoViewerZoomProps}
+                  >
+                    <Image
+                      source={{ uri: photoViewerUri }}
+                      style={[styles.photoViewerImage, { width: Math.max(300, width - 24), height: Math.max(340, height - 132) }]}
+                    />
+                  </ScrollView>
+                </Animated.View>
+              </SafeAreaView>
+            </Animated.View>
           ) : null}
         </View>
       </Modal>
@@ -2369,26 +2498,26 @@ function getQuestDurationLabel(startedAt: string, completedAt: string | null) {
   return `${durationInDays} ${durationInDays === 1 ? "day" : "days"}`;
 }
 
-function getMomentImageStyle(caption: string | null, viewportHeight: number) {
+function getMomentPhotoFrameStyle(caption: string | null, viewportHeight: number) {
   const captionLength = caption?.trim().length ?? 0;
 
   if (captionLength === 0) {
-    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.58, 280, 510) }];
+    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.64, 310, 570) }];
   }
 
   if (captionLength <= 45) {
-    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.48, 240, 430) }];
+    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.53, 265, 480) }];
   }
 
   if (captionLength <= 120) {
-    return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.43, 220, 390) }];
+    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.48, 245, 435) }];
   }
 
-  return [styles.momentImage, { height: getResponsiveMomentImageHeight(viewportHeight, 0.38, 200, 350) }];
+  return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.42, 225, 390) }];
 }
 
 function getResponsiveMomentImageHeight(viewportHeight: number, ratio: number, preferredMin: number, max: number) {
-  const responsiveMax = Math.min(max, Math.max(200, viewportHeight - 230));
+  const responsiveMax = Math.min(max, Math.max(220, viewportHeight - 210));
   const effectiveMin = Math.min(preferredMin, responsiveMax);
   return clamp(viewportHeight * ratio, effectiveMin, responsiveMax);
 }
@@ -3908,7 +4037,7 @@ const styles = StyleSheet.create({
   importPreviewScrollContent: {
     gap: 14,
     paddingTop: 8,
-    paddingBottom: 12,
+    paddingBottom: 96,
   },
   importPreviewScrap: {
     width: "100%",
@@ -3940,11 +4069,18 @@ const styles = StyleSheet.create({
     opacity: 0.32,
     transform: [{ rotate: "12deg" }],
   },
-  importPreviewImage: {
+  proofPhotoFrame: {
     width: "100%",
+    overflow: "hidden",
     borderRadius: 3,
-    resizeMode: "cover",
-    backgroundColor: palette.panel,
+    backgroundColor: palette.photoPaper,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  proofPhotoImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "contain",
   },
   previewCaptionCard: {
     width: "100%",
@@ -4245,12 +4381,6 @@ const styles = StyleSheet.create({
     opacity: 0.32,
     transform: [{ rotate: "12deg" }],
   },
-  momentImage: {
-    width: "100%",
-    borderRadius: 3,
-    resizeMode: "cover",
-    backgroundColor: palette.panel,
-  },
   momentTimestamp: {
     color: palette.pencil,
     textAlign: "left",
@@ -4263,6 +4393,101 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     textAlign: "center",
     marginTop: 0,
+  },
+  photoViewerScreen: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
+    backgroundColor: palette.paper,
+  },
+  photoViewerSafeArea: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingTop: 88,
+    paddingBottom: 34,
+  },
+  photoViewerGlowTop: {
+    position: "absolute",
+    top: -110,
+    left: -80,
+    width: 260,
+    height: 260,
+    borderRadius: 130,
+    backgroundColor: "rgba(237, 227, 255, 0.72)",
+  },
+  photoViewerGlowBottom: {
+    position: "absolute",
+    right: -110,
+    bottom: -130,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+    backgroundColor: "rgba(241, 232, 255, 0.66)",
+  },
+  photoViewerPaperFleckOne: {
+    position: "absolute",
+    top: 92,
+    right: 48,
+    width: 74,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "rgba(255, 254, 249, 0.58)",
+    transform: [{ rotate: "-12deg" }],
+  },
+  photoViewerPaperFleckTwo: {
+    position: "absolute",
+    left: 28,
+    bottom: 104,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: "rgba(237, 227, 255, 0.46)",
+  },
+  photoViewerCloseButton: {
+    position: "absolute",
+    top: 58,
+    right: 18,
+    zIndex: 4,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(241, 232, 255, 0.94)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 254, 249, 0.44)",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 5,
+  },
+  photoViewerCloseText: {
+    color: palette.ink,
+    fontSize: 30,
+    lineHeight: 32,
+    fontWeight: "800",
+  },
+  photoViewerStage: {
+    borderRadius: 6,
+    overflow: "hidden",
+    backgroundColor: "transparent",
+    shadowColor: "#000",
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  photoViewerScroll: {
+    borderRadius: 6,
+  },
+  photoViewerScrollContent: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  photoViewerImage: {
+    resizeMode: "contain",
   },
   momentReflectionScroll: {
     width: "100%",
