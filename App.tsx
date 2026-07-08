@@ -1296,36 +1296,30 @@ export default function App() {
             </Pressable>
           </View>
           {selectedMoment ? (
-            <Pressable
-              onPress={() => openPhotoViewer(selectedMoment.imageUri)}
-              style={styles.momentScrap}
-              accessibilityRole="imagebutton"
-              accessibilityLabel="Open full photo preview"
-            >
-              <View pointerEvents="none" style={styles.importPreviewTape} />
-              <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
-              <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
-                <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
-              </View>
-            </Pressable>
-          ) : null}
-          {selectedMoment?.caption ? (
             <ScrollView
-              style={getMomentReflectionStyle(selectedMoment.caption)}
-              contentContainerStyle={styles.momentReflectionContent}
+              style={styles.momentContentScroll}
+              contentContainerStyle={styles.momentContent}
               showsVerticalScrollIndicator={false}
             >
-              <ReflectionText caption={selectedMoment.caption} />
-              <Text style={styles.momentTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
+              <Pressable
+                onPress={() => openPhotoViewer(selectedMoment.imageUri)}
+                style={styles.momentScrap}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Open full photo preview. Captured ${formatTimestamp(selectedMoment.timestamp)}`}
+              >
+                <View pointerEvents="none" style={styles.importPreviewTape} />
+                <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
+                <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
+                  <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
+                </View>
+                <Text style={styles.momentPolaroidTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
+              </Pressable>
+              {selectedMoment.caption?.trim() ? <MomentJournalEntry caption={selectedMoment.caption} /> : null}
             </ScrollView>
-          ) : (
-            <Text style={[styles.momentTimestamp, styles.momentTimestampSolo]}>
-              {formatTimestamp(selectedMoment?.timestamp ?? null)}
-            </Text>
-          )}
+          ) : null}
           {momentMenuOpen && !selectedMomentReadOnly ? (
             <View style={styles.momentMenu}>
-              {selectedMoment?.caption ? (
+              {selectedMoment?.caption?.trim() ? (
                 <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
                   <Text style={styles.deleteTextButtonText}>Delete text</Text>
                 </Pressable>
@@ -1405,8 +1399,12 @@ export default function App() {
 
             <ScrollView
               keyboardShouldPersistTaps="handled"
-              style={styles.questSheetList}
+              style={[
+                styles.questSheetList,
+                { maxHeight: Math.min(430, Math.max(320, height * 0.48)) },
+              ]}
               contentContainerStyle={styles.questSheetListContent}
+              showsVerticalScrollIndicator={false}
             >
               {activeQuests.map((quest) => {
                 const isSelected = quest.id === selectedQuest?.id;
@@ -2063,7 +2061,7 @@ function TrophyCard({
           accessibilityLabel="Delete Quest"
           accessibilityState={{ disabled: deleteDisabled }}
         >
-          <MaterialCommunityIcons name="dots-horizontal" size={22} color={palette.muted} />
+          <MaterialCommunityIcons name="dots-horizontal" size={22} color={palette.ink} />
         </Pressable>
       </View>
 
@@ -2429,14 +2427,13 @@ function CelebrationOverlay({ onDone }: { onDone: () => void }) {
   );
 }
 
-function ReflectionText({ caption }: { caption: string }) {
-  const { firstSentence, remainingText } = splitFirstSentence(caption);
+function MomentJournalEntry({ caption }: { caption: string | null }) {
+  const trimmedCaption = caption?.trim() ?? "";
 
   return (
-    <Text style={styles.momentCaption}>
-      <Text style={styles.momentCaptionLead}>{firstSentence}</Text>
-      {remainingText ? ` ${remainingText}` : ""}
-    </Text>
+    <View style={styles.momentJournalEntry}>
+      <Text style={styles.momentJournalText}>{trimmedCaption}</Text>
+    </View>
   );
 }
 
@@ -2520,20 +2517,6 @@ function getResponsiveMomentImageHeight(viewportHeight: number, ratio: number, p
   const responsiveMax = Math.min(max, Math.max(220, viewportHeight - 210));
   const effectiveMin = Math.min(preferredMin, responsiveMax);
   return clamp(viewportHeight * ratio, effectiveMin, responsiveMax);
-}
-
-function getMomentReflectionStyle(caption: string) {
-  const captionLength = caption.trim().length;
-
-  if (captionLength <= 45) {
-    return [styles.momentReflectionScroll, styles.momentReflectionShort];
-  }
-
-  if (captionLength <= 120) {
-    return [styles.momentReflectionScroll, styles.momentReflectionMedium];
-  }
-
-  return [styles.momentReflectionScroll, styles.momentReflectionLong];
 }
 
 function createMomentSections(entries: JournalEntry[]) {
@@ -3914,8 +3897,8 @@ const styles = StyleSheet.create({
   cameraCloseButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -3923,7 +3906,10 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 30,
     lineHeight: 32,
-    fontWeight: "500",
+    fontWeight: "700",
+    textShadowColor: "rgba(0, 0, 0, 0.26)",
+    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: 1 },
   },
   cameraQuestTitle: {
     flex: 1,
@@ -3972,23 +3958,14 @@ const styles = StyleSheet.create({
   previewCloseButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    borderWidth: 1,
-    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   previewCloseText: {
     color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   cameraActions: {
     gap: 10,
@@ -4316,20 +4293,20 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  momentContentScroll: {
+    flex: 1,
+    width: "100%",
+  },
+  momentContent: {
+    gap: 30,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
   momentIconButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    borderWidth: 1,
-    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   momentIconButtonPlaceholder: {
     width: 44,
@@ -4338,28 +4315,19 @@ const styles = StyleSheet.create({
   momentCloseButton: {
     width: 44,
     height: 44,
-    borderRadius: 8,
-    backgroundColor: palette.panel,
-    borderWidth: 1,
-    borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.24,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
   },
   momentCloseText: {
     color: palette.ink,
     fontSize: 30,
     lineHeight: 32,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   momentDots: {
     color: palette.ink,
-    fontSize: 18,
-    lineHeight: 20,
+    fontSize: 24,
+    lineHeight: 26,
     fontWeight: "900",
   },
   momentScrap: {
@@ -4367,12 +4335,13 @@ const styles = StyleSheet.create({
     backgroundColor: palette.photoPaper,
     borderRadius: 4,
     padding: 8,
-    paddingBottom: 22,
+    paddingBottom: 26,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.42,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+    marginBottom: -6,
     transform: [{ rotate: "-1deg" }],
   },
   momentDetailDoodle: {
@@ -4381,18 +4350,21 @@ const styles = StyleSheet.create({
     opacity: 0.32,
     transform: [{ rotate: "12deg" }],
   },
-  momentTimestamp: {
-    color: palette.pencil,
-    textAlign: "left",
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: "700",
-    marginTop: 14,
-  },
-  momentTimestampSolo: {
-    alignSelf: "center",
-    textAlign: "center",
-    marginTop: 0,
+  momentPolaroidTimestamp: {
+    alignSelf: "flex-start",
+    color: palette.ink,
+    fontFamily: Platform.select({
+      ios: "Noteworthy",
+      android: "casual",
+      default: "cursive",
+    }),
+    fontSize: 22,
+    lineHeight: 29,
+    fontWeight: "500",
+    letterSpacing: 1.15,
+    marginTop: 16,
+    marginLeft: 20,
+    transform: [{ rotate: "-2deg" }],
   },
   photoViewerScreen: {
     ...StyleSheet.absoluteFillObject,
@@ -4451,17 +4423,8 @@ const styles = StyleSheet.create({
     zIndex: 4,
     width: 46,
     height: 46,
-    borderRadius: 23,
-    backgroundColor: "rgba(241, 232, 255, 0.94)",
-    borderWidth: 1,
-    borderColor: "rgba(255, 254, 249, 0.44)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 5,
   },
   photoViewerCloseText: {
     color: palette.ink,
@@ -4489,44 +4452,27 @@ const styles = StyleSheet.create({
   photoViewerImage: {
     resizeMode: "contain",
   },
-  momentReflectionScroll: {
-    width: "100%",
-    backgroundColor: "rgba(255, 254, 249, 0.9)",
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(124, 58, 237, 0.16)",
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
+  momentJournalEntry: {
+    width: "88%",
+    alignSelf: "flex-start",
+    marginTop: 0,
+    marginLeft: 16,
+    marginRight: 4,
+    paddingHorizontal: 6,
+    paddingTop: 6,
+    paddingBottom: 2,
+    transform: [{ rotate: "0.3deg" }],
   },
-  momentReflectionShort: {
-    maxHeight: 160,
-  },
-  momentReflectionMedium: {
-    maxHeight: 210,
-  },
-  momentReflectionLong: {
-    maxHeight: 260,
-  },
-  momentReflectionContent: {
-    width: "100%",
-    maxWidth: 460,
-    alignSelf: "center",
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-  },
-  momentCaption: {
+  momentJournalText: {
     color: palette.ink,
-    textAlign: "left",
-    fontSize: 16,
-    lineHeight: 25,
-    fontWeight: "600",
-  },
-  momentCaptionLead: {
-    fontWeight: "900",
+    fontFamily: Platform.select({
+      ios: "Noteworthy",
+      android: "serif",
+      default: "serif",
+    }),
+    fontSize: 18,
+    lineHeight: 29,
+    fontWeight: "500",
   },
   momentMenu: {
     position: "absolute",
