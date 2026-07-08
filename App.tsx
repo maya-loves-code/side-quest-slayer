@@ -1305,7 +1305,7 @@ export default function App() {
                 onPress={() => openPhotoViewer(selectedMoment.imageUri)}
                 style={styles.momentScrap}
                 accessibilityRole="imagebutton"
-                accessibilityLabel="Open full photo preview"
+                accessibilityLabel={`Open full photo preview. Captured ${formatTimestamp(selectedMoment.timestamp)}`}
               >
                 <View pointerEvents="none" style={styles.importPreviewTape} />
                 <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
@@ -1319,7 +1319,7 @@ export default function App() {
           ) : null}
           {momentMenuOpen && !selectedMomentReadOnly ? (
             <View style={styles.momentMenu}>
-              {selectedMoment?.caption ? (
+              {selectedMoment?.caption?.trim() ? (
                 <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
                   <Text style={styles.deleteTextButtonText}>Delete text</Text>
                 </Pressable>
@@ -3897,6 +3897,8 @@ const styles = StyleSheet.create({
   cameraCloseButton: {
     width: 44,
     height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0, 0, 0, 0.14)",
     alignItems: "center",
     justifyContent: "center",
   },
