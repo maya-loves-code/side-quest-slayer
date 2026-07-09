@@ -96,6 +96,18 @@ type MomentSection = {
 
 type FooterIconName = ComponentProps<typeof MaterialCommunityIcons>["name"];
 
+type PreviewImageMetadata = {
+  uri: string;
+  width: number;
+  height: number;
+};
+
+type PreviewPhotoCardLayout = {
+  cardWidth: number;
+  photoWidth: number;
+  photoHeight: number;
+};
+
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 180;
@@ -123,6 +135,15 @@ const REFLECTION_PROMPTS = [
   "What did you keep going through?",
   "What deserves a tiny celebration?",
 ];
+const SCRAPBOOK_PREVIEW_CAPTIONS = [
+  "you did the thing",
+  "proof you showed up",
+  "look at you go",
+  "another page in the story",
+  "you're doing it",
+  "you did that",
+];
+const DEFAULT_SCRAPBOOK_PREVIEW_CAPTION = SCRAPBOOK_PREVIEW_CAPTIONS[0];
 const TILE_SPARKLES = [
   { id: "top-left", left: 56, top: 50, x: -44, y: -36, scale: 1.05, rotate: "18deg", color: palette.accent },
   { id: "top", left: 74, top: 46, x: -4, y: -50, scale: 0.9, rotate: "-12deg", color: palette.accentSoft },
@@ -148,6 +169,69 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function isValidImageSize(width?: number, height?: number) {
+  return Boolean(width && height && width > 0 && height > 0);
+}
+
+function resolvePreviewImageMetadata(uri: string, width?: number, height?: number): Promise<PreviewImageMetadata> {
+  if (isValidImageSize(width, height)) {
+    return Promise.resolve({ uri, width: width ?? 3, height: height ?? 4 });
+  }
+
+  return new Promise((resolve) => {
+    Image.getSize(
+      uri,
+      (imageWidth, imageHeight) => resolve({ uri, width: imageWidth, height: imageHeight }),
+      () => resolve({ uri, width: 3, height: 4 })
+    );
+  });
+}
+
+function getPreviewCardLayout(
+  screenWidth: number,
+  screenHeight: number,
+  imageSize?: PreviewImageMetadata | null
+): PreviewPhotoCardLayout {
+  const imageAspect = imageSize ? imageSize.width / imageSize.height : 0.75;
+  const safeAspect = Number.isFinite(imageAspect) && imageAspect > 0 ? imageAspect : 0.75;
+  const horizontalPadding = 16;
+  const maxPhotoHeight = clamp(screenHeight * 0.62, 430, 600);
+
+  if (safeAspect < 0.78) {
+    const maxPhotoWidth = Math.min(screenWidth - 72, 340);
+    const photoHeightFromWidth = maxPhotoWidth / safeAspect;
+    const photoHeight = Math.min(maxPhotoHeight, photoHeightFromWidth);
+    const photoWidth = photoHeight * safeAspect;
+
+    return {
+      cardWidth: clamp(photoWidth + horizontalPadding, 250, screenWidth - 48),
+      photoWidth,
+      photoHeight,
+    };
+  }
+
+  if (safeAspect > 1.2) {
+    const maxPhotoWidth = Math.min(360, screenWidth - 70);
+    const photoWidth = clamp(screenWidth - 74, Math.min(240, maxPhotoWidth), maxPhotoWidth);
+    const photoHeight = clamp(photoWidth / safeAspect, 158, screenHeight * 0.28);
+
+    return {
+      cardWidth: photoWidth + horizontalPadding,
+      photoWidth,
+      photoHeight,
+    };
+  }
+
+  const photoWidth = clamp(screenWidth * 0.66, 238, 312);
+  const photoHeight = clamp(photoWidth / safeAspect, 218, maxPhotoHeight);
+
+  return {
+    cardWidth: photoWidth + horizontalPadding,
+    photoWidth,
+    photoHeight,
+  };
+}
+
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
@@ -168,8 +252,8 @@ export default function App() {
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
   const [captionDraft, setCaptionDraft] = useState("");
   const [reflectionPromptIndex, setReflectionPromptIndex] = useState(0);
-  const [pendingCaptureUri, setPendingCaptureUri] = useState<string | null>(null);
-  const [pendingImportUri, setPendingImportUri] = useState<string | null>(null);
+  const [pendingCapturePreview, setPendingCapturePreview] = useState<PreviewImageMetadata | null>(null);
+  const [pendingImportPreview, setPendingImportPreview] = useState<PreviewImageMetadata | null>(null);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [creatingQuest, setCreatingQuest] = useState(false);
@@ -185,6 +269,7 @@ export default function App() {
   const [reminderTimePickerOpen, setReminderTimePickerOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
+  const [selectedMomentPreview, setSelectedMomentPreview] = useState<PreviewImageMetadata | null>(null);
   const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
   const [photoViewerUri, setPhotoViewerUri] = useState<string | null>(null);
   const [momentMenuOpen, setMomentMenuOpen] = useState(false);
@@ -197,9 +282,10 @@ export default function App() {
 
   const activeEmoji = selectedQuest?.emoji ?? getQuestEmoji(selectedQuest?.title ?? "");
   const captionPlaceholder = REFLECTION_PROMPTS[reflectionPromptIndex];
-  const pendingPreviewUri = pendingCaptureUri ?? pendingImportUri;
-  const isPreviewingMoment = Boolean(pendingPreviewUri);
-  const isPendingCapture = Boolean(pendingCaptureUri);
+  const pendingPreview = pendingCapturePreview ?? pendingImportPreview;
+  const pendingPreviewUri = pendingPreview?.uri ?? null;
+  const isPreviewingMoment = Boolean(pendingPreview);
+  const isPendingCapture = Boolean(pendingCapturePreview);
   const photoViewerBackdropOpacity = photoViewerProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
@@ -227,9 +313,8 @@ export default function App() {
     [archivedQuestView?.entries]
   );
   const momentTileWidth = Math.min(Math.floor((width - 96) / 2), 148);
-  const previewPhotoMaxHeight = Math.max(230, height * 0.34);
-  const previewPhotoMinHeight = Math.min(240, previewPhotoMaxHeight);
-  const previewPhotoHeight = clamp(width * 0.7, previewPhotoMinHeight, previewPhotoMaxHeight);
+  const previewCardLayout = getPreviewCardLayout(width, height, pendingPreview);
+  const selectedMomentCardLayout = getPreviewCardLayout(width, height, selectedMomentPreview);
   const displayedReminderTime = reminderTimeDraft ?? dailyReminderTime;
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
@@ -242,6 +327,26 @@ export default function App() {
   useEffect(() => {
     void bootstrapApp();
   }, []);
+
+  useEffect(() => {
+    if (!selectedMoment) {
+      setSelectedMomentPreview(null);
+      return;
+    }
+
+    let isCurrent = true;
+    setSelectedMomentPreview(null);
+
+    void resolvePreviewImageMetadata(selectedMoment.imageUri).then((previewImage) => {
+      if (isCurrent) {
+        setSelectedMomentPreview(previewImage);
+      }
+    });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedMoment?.imageUri]);
 
   useEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -394,7 +499,8 @@ export default function App() {
         return;
       }
 
-      setPendingCaptureUri(photo.uri);
+      const previewImage = await resolvePreviewImageMetadata(photo.uri, photo.width, photo.height);
+      setPendingCapturePreview(previewImage);
     } catch (error) {
       console.error(error);
       Alert.alert("Camera error", "That photo did not capture. Try one more time.");
@@ -429,7 +535,9 @@ export default function App() {
         return;
       }
 
-      setPendingImportUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      const previewImage = await resolvePreviewImageMetadata(asset.uri, asset.width, asset.height);
+      setPendingImportPreview(previewImage);
     } catch (error) {
       console.error(error);
       Alert.alert("Upload error", "That photo did not save. Try one more time.");
@@ -476,13 +584,13 @@ export default function App() {
   }
 
   async function handleSaveCapturedPhoto() {
-    if (!selectedQuest || !pendingCaptureUri || savingPhoto || importingPhoto) {
+    if (!selectedQuest || !pendingCapturePreview || savingPhoto || importingPhoto) {
       return;
     }
 
     try {
       setSavingPhoto(true);
-      await saveMoment(pendingCaptureUri, "capture");
+      await saveMoment(pendingCapturePreview.uri, "capture");
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -493,13 +601,13 @@ export default function App() {
   }
 
   async function handleSaveImportedPhoto() {
-    if (!selectedQuest || !pendingImportUri || savingPhoto || importingPhoto) {
+    if (!selectedQuest || !pendingImportPreview || savingPhoto || importingPhoto) {
       return;
     }
 
     try {
       setSavingPhoto(true);
-      await saveMoment(pendingImportUri, "import");
+      await saveMoment(pendingImportPreview.uri, "import");
       await finishMomentAdded();
     } catch (error) {
       console.error(error);
@@ -510,11 +618,11 @@ export default function App() {
   }
 
   function cancelPendingCapture() {
-    setPendingCaptureUri(null);
+    setPendingCapturePreview(null);
   }
 
   function cancelPendingImport() {
-    setPendingImportUri(null);
+    setPendingImportPreview(null);
   }
 
   function flipCamera() {
@@ -547,8 +655,8 @@ export default function App() {
   async function finishMomentAdded() {
     setCameraOpen(false);
     setCaptionDraft("");
-    setPendingCaptureUri(null);
-    setPendingImportUri(null);
+    setPendingCapturePreview(null);
+    setPendingImportPreview(null);
     const questEntries = await refreshData();
     const newestMoment = questEntries[0];
 
@@ -611,8 +719,8 @@ export default function App() {
 
     setCameraFacing("back");
     setCaptionDraft("");
-    setPendingCaptureUri(null);
-    setPendingImportUri(null);
+    setPendingCapturePreview(null);
+    setPendingImportPreview(null);
     setReflectionPromptIndex((index) => (index + 1) % REFLECTION_PROMPTS.length);
     setCameraOpen(true);
   }
@@ -620,8 +728,8 @@ export default function App() {
   function closeCamera() {
     setCameraOpen(false);
     setCaptionDraft("");
-    setPendingCaptureUri(null);
-    setPendingImportUri(null);
+    setPendingCapturePreview(null);
+    setPendingImportPreview(null);
   }
 
   async function openPrivacyPolicy() {
@@ -865,8 +973,8 @@ export default function App() {
     setNewQuestFormOpen(false);
     setCameraOpen(false);
     setCaptionDraft("");
-    setPendingCaptureUri(null);
-    setPendingImportUri(null);
+    setPendingCapturePreview(null);
+    setPendingImportPreview(null);
     setDailyReminderEnabledState(false);
     setDailyReminderTimeState(DEFAULT_DAILY_REMINDER_TIME);
     setEmojiPickerOpen(false);
@@ -1130,13 +1238,11 @@ export default function App() {
                   keyboardShouldPersistTaps="handled"
                   showsVerticalScrollIndicator={false}
                 >
-                  <View style={styles.importPreviewScrap}>
-                    <View pointerEvents="none" style={styles.importPreviewTape} />
-                    <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
-                    <View style={[styles.proofPhotoFrame, { height: previewPhotoHeight }]}>
-                      <Image source={{ uri: pendingPreviewUri }} style={styles.proofPhotoImage} />
-                    </View>
-                  </View>
+                  <AdaptivePreviewPhotoCard
+                    uri={pendingPreviewUri}
+                    layout={previewCardLayout}
+                    caption={DEFAULT_SCRAPBOOK_PREVIEW_CAPTION}
+                  />
                   <View style={styles.previewCaptionCard}>
                     <TextInput
                       value={captionDraft}
@@ -1303,16 +1409,15 @@ export default function App() {
             >
               <Pressable
                 onPress={() => openPhotoViewer(selectedMoment.imageUri)}
-                style={styles.momentScrap}
+                style={styles.momentPreviewButton}
                 accessibilityRole="imagebutton"
                 accessibilityLabel={`Open full photo preview. Captured ${formatTimestamp(selectedMoment.timestamp)}`}
               >
-                <View pointerEvents="none" style={styles.importPreviewTape} />
-                <DoodleMark variant="spark" style={styles.momentDetailDoodle} />
-                <View style={getMomentPhotoFrameStyle(selectedMoment.caption, height)}>
-                  <Image source={{ uri: selectedMoment.imageUri }} style={styles.proofPhotoImage} />
-                </View>
-                <Text style={styles.momentPolaroidTimestamp}>{formatTimestamp(selectedMoment.timestamp)}</Text>
+                <AdaptivePreviewPhotoCard
+                  uri={selectedMoment.imageUri}
+                  layout={selectedMomentCardLayout}
+                  caption={formatTimestamp(selectedMoment.timestamp)}
+                />
               </Pressable>
               {selectedMoment.caption?.trim() ? <MomentJournalEntry caption={selectedMoment.caption} /> : null}
             </ScrollView>
@@ -1321,14 +1426,17 @@ export default function App() {
             <View style={styles.momentMenu}>
               {selectedMoment?.caption?.trim() ? (
                 <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
+                  <MaterialCommunityIcons name="text-box-remove-outline" size={19} color={palette.pencil} />
                   <Text style={styles.deleteTextButtonText}>Delete text</Text>
                 </Pressable>
               ) : null}
+              {selectedMoment?.caption?.trim() ? <View style={styles.momentMenuDivider} /> : null}
               <Pressable
                 onPress={handleDeleteSelectedMoment}
                 style={deletingMoment ? styles.deleteMomentButtonDisabled : styles.deleteMomentButton}
                 disabled={deletingMoment}
               >
+                <MaterialCommunityIcons name="trash-can-outline" size={19} color={palette.danger} />
                 <Text style={styles.deleteMomentText}>{deletingMoment ? "Deleting..." : "Delete moment"}</Text>
               </Pressable>
             </View>
@@ -1966,6 +2074,36 @@ function DoodleMark({ variant, style }: { variant: "arrow" | "spark" | "star" | 
   );
 }
 
+function AdaptivePreviewPhotoCard({
+  uri,
+  layout,
+  caption,
+}: {
+  uri: string;
+  layout: PreviewPhotoCardLayout;
+  caption: string;
+}) {
+  return (
+    <View
+      style={[
+        styles.importPreviewScrap,
+        {
+          width: layout.cardWidth,
+        },
+      ]}
+    >
+      <View pointerEvents="none" style={styles.importPreviewTape} />
+      <View style={[styles.previewPhotoFrame, { width: layout.photoWidth, height: layout.photoHeight }]}>
+        <Image source={{ uri }} style={styles.proofPhotoImage} />
+      </View>
+      <View style={styles.previewPhotoCaptionStrip}>
+        <DoodleMark variant="spark" style={styles.importPreviewDoodle} />
+        <Text style={styles.previewPhotoCaptionText}>{caption}</Text>
+      </View>
+    </View>
+  );
+}
+
 function CameraGlyph() {
   return (
     <View style={styles.cameraGlyph}>
@@ -2493,30 +2631,6 @@ function getQuestDurationLabel(startedAt: string, completedAt: string | null) {
   );
 
   return `${durationInDays} ${durationInDays === 1 ? "day" : "days"}`;
-}
-
-function getMomentPhotoFrameStyle(caption: string | null, viewportHeight: number) {
-  const captionLength = caption?.trim().length ?? 0;
-
-  if (captionLength === 0) {
-    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.64, 310, 570) }];
-  }
-
-  if (captionLength <= 45) {
-    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.53, 265, 480) }];
-  }
-
-  if (captionLength <= 120) {
-    return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.48, 245, 435) }];
-  }
-
-  return [styles.proofPhotoFrame, { height: getResponsiveMomentImageHeight(viewportHeight, 0.42, 225, 390) }];
-}
-
-function getResponsiveMomentImageHeight(viewportHeight: number, ratio: number, preferredMin: number, max: number) {
-  const responsiveMax = Math.min(max, Math.max(220, viewportHeight - 210));
-  const effectiveMin = Math.min(preferredMin, responsiveMax);
-  return clamp(viewportHeight * ratio, effectiveMin, responsiveMax);
 }
 
 function createMomentSections(entries: JournalEntry[]) {
@@ -4012,38 +4126,40 @@ const styles = StyleSheet.create({
     minHeight: 0,
   },
   importPreviewScrollContent: {
-    gap: 14,
-    paddingTop: 8,
+    alignItems: "center",
+    gap: 18,
+    paddingTop: 20,
     paddingBottom: 96,
   },
   importPreviewScrap: {
-    width: "100%",
+    alignSelf: "center",
     backgroundColor: palette.photoPaper,
-    borderRadius: 4,
+    borderRadius: 8,
     padding: 8,
-    paddingBottom: 22,
+    paddingBottom: 0,
+    alignItems: "center",
     shadowColor: palette.shadow,
-    shadowOpacity: 0.42,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.34,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
     elevation: 4,
-    transform: [{ rotate: "-1.2deg" }],
+    transform: [{ rotate: "-0.4deg" }],
   },
   importPreviewTape: {
     position: "absolute",
-    top: -9,
+    top: -13,
     alignSelf: "center",
-    width: 72,
-    height: 18,
+    width: 76,
+    height: 22,
     borderRadius: 2,
-    backgroundColor: "rgba(233, 217, 183, 0.82)",
+    backgroundColor: "rgba(233, 217, 183, 0.84)",
     zIndex: 3,
-    transform: [{ rotate: "2deg" }],
+    transform: [{ rotate: "1.5deg" }],
   },
   importPreviewDoodle: {
-    right: 12,
-    bottom: 4,
-    opacity: 0.32,
+    left: 2,
+    top: 4,
+    opacity: 0.36,
     transform: [{ rotate: "12deg" }],
   },
   proofPhotoFrame: {
@@ -4054,10 +4170,35 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  previewPhotoFrame: {
+    overflow: "hidden",
+    borderRadius: 6,
+    backgroundColor: "rgba(241, 232, 255, 0.34)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   proofPhotoImage: {
     width: "100%",
     height: "100%",
     resizeMode: "contain",
+  },
+  previewPhotoCaptionStrip: {
+    position: "relative",
+    minHeight: 46,
+    width: "100%",
+    paddingHorizontal: 28,
+    paddingTop: 11,
+    paddingBottom: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  previewPhotoCaptionText: {
+    color: palette.pencil,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: "500",
+    opacity: 0.86,
+    textAlign: "center",
   },
   previewCaptionCard: {
     width: "100%",
@@ -4330,41 +4471,10 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     fontWeight: "900",
   },
-  momentScrap: {
-    width: "100%",
-    backgroundColor: palette.photoPaper,
-    borderRadius: 4,
-    padding: 8,
-    paddingBottom: 26,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.32,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
+  momentPreviewButton: {
+    alignSelf: "center",
+    alignItems: "center",
     marginBottom: -6,
-    transform: [{ rotate: "-1deg" }],
-  },
-  momentDetailDoodle: {
-    right: 12,
-    bottom: 4,
-    opacity: 0.32,
-    transform: [{ rotate: "12deg" }],
-  },
-  momentPolaroidTimestamp: {
-    alignSelf: "flex-start",
-    color: palette.ink,
-    fontFamily: Platform.select({
-      ios: "Noteworthy",
-      android: "casual",
-      default: "cursive",
-    }),
-    fontSize: 22,
-    lineHeight: 29,
-    fontWeight: "500",
-    letterSpacing: 1.15,
-    marginTop: 16,
-    marginLeft: 20,
-    transform: [{ rotate: "-2deg" }],
   },
   photoViewerScreen: {
     ...StyleSheet.absoluteFillObject,
@@ -4476,36 +4586,59 @@ const styles = StyleSheet.create({
   },
   momentMenu: {
     position: "absolute",
-    left: 18,
-    top: 104,
-    gap: 8,
+    left: 16,
+    top: 102,
+    minWidth: 196,
+    backgroundColor: "rgba(255, 254, 249, 0.96)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.13)",
+    paddingVertical: 6,
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
   },
   deleteTextButton: {
-    backgroundColor: palette.card,
-    borderRadius: 8,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   deleteTextButtonText: {
-    color: palette.ink,
-    fontWeight: "900",
+    color: palette.pencil,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  momentMenuDivider: {
+    height: 1,
+    marginHorizontal: 12,
+    backgroundColor: "rgba(124, 58, 237, 0.1)",
   },
   deleteMomentButton: {
-    backgroundColor: palette.dangerSoft,
-    borderRadius: 8,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   deleteMomentButtonDisabled: {
-    backgroundColor: palette.dangerSoft,
-    borderRadius: 8,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     opacity: 0.62,
   },
   deleteMomentText: {
     color: palette.danger,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "800",
   },
   questHeroScrap: {
     position: "relative",
