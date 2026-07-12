@@ -5,6 +5,12 @@ import {
   SideQuestSlayerPhonePromo,
   type SideQuestSlayerPhonePromoProps,
 } from "./Composition";
+import {
+  SHORT_DURATION_IN_FRAMES,
+  SHORT_FPS,
+  SideQuestSlayerShort,
+  type SideQuestSlayerShortProps,
+} from "./short/SideQuestSlayerShort";
 
 const fps = 30;
 const durationInFrames = fps * 5;
@@ -12,6 +18,32 @@ const durationInFrames = fps * 5;
 export const RemotionRoot: FC = () => {
   return (
     <>
+      <Composition
+        id="SideQuestSlayerShortMusic"
+        component={SideQuestSlayerShort}
+        durationInFrames={SHORT_DURATION_IN_FRAMES}
+        fps={SHORT_FPS}
+        width={1080}
+        height={1920}
+        defaultProps={
+          {
+            musicEnabled: true,
+          } satisfies SideQuestSlayerShortProps
+        }
+      />
+      <Composition
+        id="SideQuestSlayerShortSfxOnly"
+        component={SideQuestSlayerShort}
+        durationInFrames={SHORT_DURATION_IN_FRAMES}
+        fps={SHORT_FPS}
+        width={1080}
+        height={1920}
+        defaultProps={
+          {
+            musicEnabled: false,
+          } satisfies SideQuestSlayerShortProps
+        }
+      />
       <Composition
         id="SideQuestSlayerPhonePromoVertical"
         component={SideQuestSlayerPhonePromo}

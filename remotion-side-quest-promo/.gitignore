@@ -3,5 +3,10 @@ dist
 .DS_Store
 .env
 
-# Ignore the output video from Git but not videos you import into src/.
+# Generated renders and local delivery copies.
 out
+deliverables
+
+# Original and transcoded camera media are kept locally because they are too
+# large for standard GitHub storage. See README.md for the required filenames.
+public/media
