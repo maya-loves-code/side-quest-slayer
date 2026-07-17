@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 import WidgetKit
 
@@ -35,7 +36,6 @@ final class WidgetDataBridge: NSObject {
         try self.writeWidgetCache(entries)
         DispatchQueue.main.async {
           WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
-          WidgetCenter.shared.reloadAllTimelines()
           resolve(nil)
         }
       } catch {
@@ -75,13 +75,8 @@ final class WidgetDataBridge: NSObject {
 
       let filename = "memory-\(id).jpg"
       let destinationURL = photosURL.appendingPathComponent(filename)
-      let cachedImage = UIImage(contentsOfFile: destinationURL.path)
-      let cachedLongestDimension = max(
-        cachedImage?.cgImage?.width ?? 0,
-        cachedImage?.cgImage?.height ?? 0
-      )
 
-      if cachedImage == nil || cachedLongestDimension > 1_200 {
+      if cachedImageNeedsRefresh(at: destinationURL) {
         let sourceURL = localFileURL(from: imageURI)
         try writeOptimizedJPEG(from: sourceURL, to: destinationURL)
       }
@@ -122,6 +117,20 @@ final class WidgetDataBridge: NSObject {
     }
 
     return URL(fileURLWithPath: uri)
+  }
+
+  private func cachedImageNeedsRefresh(at url: URL) -> Bool {
+    guard
+      let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+      let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, nil)
+        as? [CFString: Any],
+      let pixelWidth = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+      let pixelHeight = properties[kCGImagePropertyPixelHeight] as? NSNumber
+    else {
+      return true
+    }
+
+    return max(pixelWidth.intValue, pixelHeight.intValue) > 1_200
   }
 
   private func writeOptimizedJPEG(from sourceURL: URL, to destinationURL: URL) throws {
