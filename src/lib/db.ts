@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 
+import { createStoredPhotoReference, resolveStoredPhotoUri } from "./storage";
 import type { JournalEntry, Quest } from "../types";
 
 const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
@@ -83,7 +84,7 @@ function mapEntry(row: any): JournalEntry {
   return {
     id: row.id,
     questId: row.quest_id,
-    imageUri: row.image_uri,
+    imageUri: resolveStoredPhotoUri(row.image_uri),
     timestamp: row.timestamp,
     isMilestone: row.is_milestone,
     caption: row.caption ?? null,
@@ -269,7 +270,7 @@ export async function addEntry(questId: number, imageUri: string, isMilestone = 
   await db.runAsync(
     `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
     questId,
-    imageUri,
+    createStoredPhotoReference(imageUri),
     timestamp,
     isMilestone,
     savedCaption
@@ -295,7 +296,7 @@ export async function addDemoEntry({
   await db.runAsync(
     `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
     questId,
-    imageUri,
+    createStoredPhotoReference(imageUri),
     timestamp,
     isMilestone,
     savedCaption
@@ -322,6 +323,20 @@ export async function getEntriesForQuest(questId: number) {
   );
 
   return rows.map(mapEntry);
+}
+
+export async function getAllEntries() {
+  const db = await getDatabase();
+  const rows = await db.getAllAsync<any>(`SELECT * FROM entries ORDER BY timestamp ASC, id ASC`);
+
+  return rows.map(mapEntry);
+}
+
+export async function getEntryById(entryId: number) {
+  const db = await getDatabase();
+  const row = await db.getFirstAsync<any>(`SELECT * FROM entries WHERE id = ?`, entryId);
+
+  return row ? mapEntry(row) : null;
 }
 
 export async function getJourneyPair(questId: number) {

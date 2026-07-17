@@ -42,12 +42,15 @@ import {
   deleteArchivedQuest,
   deleteEntry,
   getActiveQuests,
+  getAllEntries,
   getArchivedQuests,
   getDailyReminderEnabled,
   getDailyReminderTime,
+  getEntryById,
   getEntriesForQuest,
   getJourneyPair,
   getLastOpenQuestId,
+  getQuestById,
   initializeDatabase,
   setDailyReminderEnabled,
   setDailyReminderTime,
@@ -68,6 +71,7 @@ import {
   saveImportedPhoto,
 } from "./src/lib/storage";
 import { palette } from "./src/theme/colors";
+import { syncWidgetMemories } from "./src/lib/widgetSync";
 import type { JournalEntry, Quest } from "./src/types";
 import type { DemoQuestSeed } from "./src/dev/demoSeeds";
 
@@ -113,6 +117,7 @@ const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 180;
 const FOOTER_ICON_SIZE = 24;
 const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
+const WIDGET_MOMENT_URL_PATTERN = /^sidequestslayer:\/\/moment\/(\d+)(?:[/?#]|$)/i;
 const REFLECTION_PROMPTS = [
   "What felt easier today?",
   "What are you proud of?",
@@ -236,6 +241,8 @@ export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const importPreviewScrollRef = useRef<ScrollView | null>(null);
+  const databaseReadyRef = useRef(false);
+  const pendingWidgetURLRef = useRef<string | null>(null);
   const photoViewerProgress = useRef(new Animated.Value(0)).current;
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
@@ -329,6 +336,19 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (!databaseReadyRef.current) {
+        pendingWidgetURLRef.current = url;
+        return;
+      }
+
+      void openWidgetMomentURL(url);
+    });
+
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     if (!selectedMoment) {
       setSelectedMomentPreview(null);
       return;
@@ -386,6 +406,7 @@ export default function App() {
   async function bootstrapApp() {
     try {
       await initializeDatabase();
+      databaseReadyRef.current = true;
       const [reminderEnabled, reminderTime] = await Promise.all([
         getDailyReminderEnabled(),
         getDailyReminderTime(),
@@ -393,6 +414,13 @@ export default function App() {
       setDailyReminderEnabledState(reminderEnabled);
       setDailyReminderTimeState(reminderTime);
       await refreshData();
+
+      const initialURL = pendingWidgetURLRef.current ?? (await Linking.getInitialURL());
+      pendingWidgetURLRef.current = null;
+
+      if (initialURL) {
+        await openWidgetMomentURL(initialURL);
+      }
     } catch (error) {
       console.error(error);
       Alert.alert("Setup error", "Side Quest Slayer could not finish setting up local storage.");
@@ -403,9 +431,12 @@ export default function App() {
 
   async function refreshData(preferredQuestId?: number | null) {
     const lastOpenQuestId = preferredQuestId !== undefined ? preferredQuestId : await getLastOpenQuestId();
-    const quests = await getActiveQuests();
+    const [quests, trophies, allEntries] = await Promise.all([
+      getActiveQuests(),
+      getArchivedQuests(),
+      getAllEntries(),
+    ]);
     const nextQuest = quests.find((quest) => quest.id === lastOpenQuestId) ?? quests[0] ?? null;
-    const trophies = await getArchivedQuests();
     const trophySummaries = await Promise.all(
       trophies.map(async (trophy) => createArchivedQuestSummary(trophy, await getEntriesForQuest(trophy.id)))
     );
@@ -424,7 +455,47 @@ export default function App() {
       await setLastOpenQuestId(nextQuest.id);
     }
 
+    await syncWidgetMemories(allEntries);
+
     return questEntries;
+  }
+
+  async function openWidgetMomentURL(url: string) {
+    const entryId = getWidgetMomentId(url);
+
+    if (!entryId) {
+      return;
+    }
+
+    const entry = await getEntryById(entryId);
+
+    if (!entry) {
+      return;
+    }
+
+    const quest = await getQuestById(entry.questId);
+
+    if (!quest) {
+      return;
+    }
+
+    setPhotoViewerUri(null);
+    setMomentMenuOpen(false);
+
+    if (quest.status === "archived") {
+      const questEntries = await getEntriesForQuest(quest.id);
+      setScreen("trophies");
+      setArchivedQuestView(createArchivedQuestSummary(quest, questEntries));
+      setSelectedMomentReadOnly(true);
+    } else {
+      await setLastOpenQuestId(quest.id);
+      await refreshData(quest.id);
+      setScreen("home");
+      setArchivedQuestView(null);
+      setSelectedMomentReadOnly(false);
+    }
+
+    setSelectedMoment(entry);
   }
 
   async function handleCreateQuest() {
@@ -952,6 +1023,7 @@ export default function App() {
       await cancelDailyQuestReminder();
       await deleteAllStoredPhotos();
       await deleteAllAppData();
+      await syncWidgetMemories([]);
 
       resetAppStateAfterLocalDataClear();
     } catch (error) {
@@ -1052,6 +1124,7 @@ export default function App() {
       await cancelDailyQuestReminder();
       await deleteAllStoredPhotos();
       await deleteAllAppData();
+      await syncWidgetMemories([]);
       resetAppStateAfterLocalDataClear();
 
       const { WRITER_DEMO_QUEST } = loadDemoSeeds();
@@ -1099,6 +1172,7 @@ export default function App() {
       await cancelDailyQuestReminder();
       await deleteAllStoredPhotos();
       await deleteAllAppData();
+      await syncWidgetMemories([]);
       resetAppStateAfterLocalDataClear();
     } catch (error) {
       console.error(error);
@@ -2379,6 +2453,12 @@ function ChooseQuestOnboarding({
       </View>
     </View>
   );
+}
+
+function getWidgetMomentId(url: string) {
+  const entryId = Number(url.match(WIDGET_MOMENT_URL_PATTERN)?.[1]);
+
+  return Number.isInteger(entryId) && entryId > 0 ? entryId : null;
 }
 
 function DailyInspirationText({ message }: { message: string }) {

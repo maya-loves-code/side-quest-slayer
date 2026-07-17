@@ -1,7 +1,33 @@
 import * as FileSystem from "expo-file-system/legacy";
 
 const QUEST_PHOTO_DIR = `${FileSystem.documentDirectory}quest-proof`;
+const QUEST_PHOTO_REFERENCE_PREFIX = "quest-proof/";
+const QUEST_PHOTO_PATH_MARKER = "/Documents/quest-proof/";
 const SUPPORTED_PHOTO_EXTENSIONS = new Set(["jpg", "jpeg", "png", "heic", "webp"]);
+
+export function createStoredPhotoReference(uri: string) {
+  const markerIndex = uri.indexOf(QUEST_PHOTO_PATH_MARKER);
+
+  if (markerIndex >= 0) {
+    return `${QUEST_PHOTO_REFERENCE_PREFIX}${uri.slice(markerIndex + QUEST_PHOTO_PATH_MARKER.length)}`;
+  }
+
+  return uri;
+}
+
+export function resolveStoredPhotoUri(uri: string) {
+  if (uri.startsWith(QUEST_PHOTO_REFERENCE_PREFIX)) {
+    return `${FileSystem.documentDirectory}${uri}`;
+  }
+
+  const markerIndex = uri.indexOf(QUEST_PHOTO_PATH_MARKER);
+
+  if (markerIndex >= 0) {
+    return `${QUEST_PHOTO_DIR}/${uri.slice(markerIndex + QUEST_PHOTO_PATH_MARKER.length)}`;
+  }
+
+  return uri;
+}
 
 export async function ensurePhotoDirectory() {
   const info = await FileSystem.getInfoAsync(QUEST_PHOTO_DIR);
@@ -72,10 +98,11 @@ function getSafeDemoAssetFilename(filename: string) {
 
 export async function deleteStoredPhoto(uri: string) {
   try {
-    const info = await FileSystem.getInfoAsync(uri);
+    const resolvedUri = resolveStoredPhotoUri(uri);
+    const info = await FileSystem.getInfoAsync(resolvedUri);
 
     if (info.exists) {
-      await FileSystem.deleteAsync(uri, { idempotent: true });
+      await FileSystem.deleteAsync(resolvedUri, { idempotent: true });
     }
 
     return true;
