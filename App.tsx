@@ -1,5 +1,3 @@
-import "react-native-gesture-handler";
-
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
