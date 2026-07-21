@@ -287,7 +287,7 @@ export async function addEntry(
     await moveQuestStartEarlier(db, questId, savedTimestamp);
   });
 
-  if (!entryId) {
+  if (entryId === null) {
     throw new Error("Moment could not be created.");
   }
 
