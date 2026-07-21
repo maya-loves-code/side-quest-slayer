@@ -56,7 +56,7 @@
     <key>NSCameraUsageDescription</key>
     <string>Side Quest Slayer uses your camera to capture daily proof of your progress.</string>
     <key>NSPhotoLibraryUsageDescription</key>
-    <string>Side Quest Slayer uses your photo library to upload proof moments from your camera roll.</string>
+    <string>Side Quest Slayer uses your selected photos to add proof moments and suggest when they happened.</string>
     <key>RCTNewArchEnabled</key>
     <true/>
     <key>UILaunchStoryboardName</key>

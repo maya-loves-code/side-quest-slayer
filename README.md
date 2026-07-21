@@ -7,6 +7,7 @@ Bare-bones V1 of a private, local-first progress journal for multiple active que
 - Multiple active quests with last-opened quest restore
 - Full-screen daily proof camera
 - Camera roll photo uploads from the capture flow
+- Backdated moments with photo-date suggestions and user confirmation
 - Local photo persistence to the device file system
 - Local SQLite storage for quests and entries
 - Scrapbook-style 2-3 column moment grid
@@ -21,6 +22,7 @@ Bare-bones V1 of a private, local-first progress journal for multiple active que
 - React Native
 - `expo-camera`
 - `expo-image-picker`
+- `expo-media-library`
 - `expo-sqlite`
 - `expo-file-system`
 - `expo-notifications`

@@ -262,19 +262,36 @@ export async function deleteArchivedQuest(questId: number) {
   await db.runAsync(`DELETE FROM quests WHERE id = ? AND status = 'archived'`, questId);
 }
 
-export async function addEntry(questId: number, imageUri: string, isMilestone = 0, caption = "") {
+export async function addEntry(
+  questId: number,
+  imageUri: string,
+  timestamp: string,
+  isMilestone = 0,
+  caption = ""
+) {
   const db = await getDatabase();
-  const timestamp = new Date().toISOString();
+  const savedTimestamp = validateEntryTimestamp(timestamp);
   const savedCaption = caption.trim().slice(0, ENTRY_CAPTION_CHARACTER_LIMIT) || null;
+  let entryId: number | null = null;
 
-  await db.runAsync(
-    `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
-    questId,
-    createStoredPhotoReference(imageUri),
-    timestamp,
-    isMilestone,
-    savedCaption
-  );
+  await db.withTransactionAsync(async () => {
+    const result = await db.runAsync(
+      `INSERT INTO entries (quest_id, image_uri, timestamp, is_milestone, caption) VALUES (?, ?, ?, ?, ?)`,
+      questId,
+      createStoredPhotoReference(imageUri),
+      savedTimestamp,
+      isMilestone,
+      savedCaption
+    );
+    entryId = result.lastInsertRowId;
+    await moveQuestStartEarlier(db, questId, savedTimestamp);
+  });
+
+  if (!entryId) {
+    throw new Error("Moment could not be created.");
+  }
+
+  return entryId;
 }
 
 export async function addDemoEntry({
@@ -307,6 +324,42 @@ export async function clearEntryCaption(entryId: number) {
   const db = await getDatabase();
 
   await db.runAsync(`UPDATE entries SET caption = NULL WHERE id = ?`, entryId);
+}
+
+export async function updateEntryTimestamp(entryId: number, timestamp: string) {
+  const db = await getDatabase();
+  const savedTimestamp = validateEntryTimestamp(timestamp);
+  let questId: number | null = null;
+
+  await db.withTransactionAsync(async () => {
+    const entry = await db.getFirstAsync<{ quest_id: number; status: string }>(
+      `SELECT entries.quest_id, quests.status
+       FROM entries
+       JOIN quests ON quests.id = entries.quest_id
+       WHERE entries.id = ?`,
+      entryId
+    );
+
+    if (!entry) {
+      throw new Error("Moment does not exist.");
+    }
+
+    if (entry.status !== "active") {
+      throw new Error("Completed quest moments are read-only.");
+    }
+
+    questId = entry.quest_id;
+    await db.runAsync(`UPDATE entries SET timestamp = ? WHERE id = ?`, savedTimestamp, entryId);
+    await moveQuestStartEarlier(db, entry.quest_id, savedTimestamp);
+  });
+
+  const updatedEntry = await getEntryById(entryId);
+
+  if (!updatedEntry || questId === null) {
+    throw new Error("Moment could not be updated.");
+  }
+
+  return updatedEntry;
 }
 
 export async function deleteEntry(entryId: number) {
@@ -364,4 +417,33 @@ export async function deleteAllAppData() {
     await db.runAsync(`DELETE FROM quests`);
     await db.runAsync(`DELETE FROM app_settings`);
   });
+}
+
+function validateEntryTimestamp(timestamp: string) {
+  const date = new Date(timestamp);
+
+  if (!Number.isFinite(date.getTime())) {
+    throw new Error("Moment timestamp is invalid.");
+  }
+
+  const today = new Date();
+  const selectedDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+  if (selectedDay.getTime() > todayStart.getTime()) {
+    throw new Error("Moment date cannot be in the future.");
+  }
+
+  return date.toISOString();
+}
+
+async function moveQuestStartEarlier(db: SQLite.SQLiteDatabase, questId: number, timestamp: string) {
+  await db.runAsync(
+    `UPDATE quests
+     SET started_at = ?
+     WHERE id = ? AND ? < started_at`,
+    timestamp,
+    questId,
+    timestamp
+  );
 }
