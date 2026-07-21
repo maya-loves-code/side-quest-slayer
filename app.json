@@ -21,8 +21,18 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll.",
+          "photosPermission": "Side Quest Slayer uses your selected photos to add proof moments and suggest when they happened.",
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Side Quest Slayer uses your selected photos to add proof moments and suggest when they happened.",
+          "savePhotosPermission": false,
+          "granularPermissions": [
+            "photo"
+          ]
         }
       ],
       "expo-sqlite",
@@ -40,7 +50,7 @@
       },
       "infoPlist": {
         "NSCameraUsageDescription": "Side Quest Slayer uses your camera to capture daily proof of your progress.",
-        "NSPhotoLibraryUsageDescription": "Side Quest Slayer uses your photo library to upload proof moments from your camera roll.",
+        "NSPhotoLibraryUsageDescription": "Side Quest Slayer uses your selected photos to add proof moments and suggest when they happened.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },

@@ -4,6 +4,7 @@ import type { DateTimePickerEvent } from "@react-native-community/datetimepicker
 import { CameraView, useCameraPermissions } from "expo-camera";
 import type { CameraType } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
+import * as MediaLibrary from "expo-media-library";
 import { StatusBar } from "expo-status-bar";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -55,6 +56,7 @@ import {
   setDailyReminderEnabled,
   setDailyReminderTime,
   setLastOpenQuestId,
+  updateEntryTimestamp,
   updateQuestEmoji,
 } from "./src/lib/db";
 import {
@@ -105,6 +107,8 @@ type PreviewImageMetadata = {
   width: number;
   height: number;
 };
+
+type MomentDateSource = "today" | "photo" | "chosen";
 
 type PreviewPhotoCardLayout = {
   cardWidth: number;
@@ -247,6 +251,7 @@ export default function App() {
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const [loading, setLoading] = useState(true);
+  const [resolvingWidgetMoment, setResolvingWidgetMoment] = useState(false);
   const [screen, setScreen] = useState<Screen>("home");
   const [questTitle, setQuestTitle] = useState("");
   const [activeQuests, setActiveQuests] = useState<Quest[]>([]);
@@ -261,6 +266,9 @@ export default function App() {
   const [reflectionPromptIndex, setReflectionPromptIndex] = useState(0);
   const [pendingCapturePreview, setPendingCapturePreview] = useState<PreviewImageMetadata | null>(null);
   const [pendingImportPreview, setPendingImportPreview] = useState<PreviewImageMetadata | null>(null);
+  const [pendingMomentDate, setPendingMomentDate] = useState(() => new Date());
+  const [pendingMomentDateSource, setPendingMomentDateSource] = useState<MomentDateSource>("today");
+  const [pendingMomentDatePickerOpen, setPendingMomentDatePickerOpen] = useState(false);
   const [savingPhoto, setSavingPhoto] = useState(false);
   const [importingPhoto, setImportingPhoto] = useState(false);
   const [creatingQuest, setCreatingQuest] = useState(false);
@@ -278,8 +286,14 @@ export default function App() {
   const [selectedMoment, setSelectedMoment] = useState<JournalEntry | null>(null);
   const [selectedMomentPreview, setSelectedMomentPreview] = useState<PreviewImageMetadata | null>(null);
   const [selectedMomentReadOnly, setSelectedMomentReadOnly] = useState(false);
+  const [selectedMomentOpenedFromWidget, setSelectedMomentOpenedFromWidget] = useState(false);
+  const [widgetLaunchCoverVisible, setWidgetLaunchCoverVisible] = useState(false);
+  const [appSnapshotCoverVisible, setAppSnapshotCoverVisible] = useState(false);
   const [photoViewerUri, setPhotoViewerUri] = useState<string | null>(null);
   const [momentMenuOpen, setMomentMenuOpen] = useState(false);
+  const [editMomentDatePickerOpen, setEditMomentDatePickerOpen] = useState(false);
+  const [editMomentDateDraft, setEditMomentDateDraft] = useState<Date | null>(null);
+  const [savingMomentDate, setSavingMomentDate] = useState(false);
   const [highlightedMomentId, setHighlightedMomentId] = useState<number | null>(null);
   const [celebrationKey, setCelebrationKey] = useState(0);
   const [scrapbookY, setScrapbookY] = useState(0);
@@ -346,6 +360,37 @@ export default function App() {
     });
 
     return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    let resumeCoverTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (resumeCoverTimeout) {
+        clearTimeout(resumeCoverTimeout);
+        resumeCoverTimeout = null;
+      }
+
+      if (nextState === "inactive" || nextState === "background") {
+        setAppSnapshotCoverVisible(true);
+        return;
+      }
+
+      if (nextState === "active") {
+        // Leave the neutral snapshot in place long enough for an incoming
+        // widget URL to mount its moment screen underneath it.
+        resumeCoverTimeout = setTimeout(() => {
+          setAppSnapshotCoverVisible(false);
+        }, 250);
+      }
+    });
+
+    return () => {
+      if (resumeCoverTimeout) {
+        clearTimeout(resumeCoverTimeout);
+      }
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -467,35 +512,56 @@ export default function App() {
       return;
     }
 
-    const entry = await getEntryById(entryId);
+    setResolvingWidgetMoment(true);
+    setWidgetLaunchCoverVisible(true);
+    let willPresentMoment = false;
 
-    if (!entry) {
-      return;
+    try {
+      const entry = await getEntryById(entryId);
+
+      if (!entry) {
+        return;
+      }
+
+      const quest = await getQuestById(entry.questId);
+
+      if (!quest) {
+        return;
+      }
+
+      setPhotoViewerUri(null);
+      setMomentMenuOpen(false);
+      setSelectedMomentOpenedFromWidget(true);
+
+      if (quest.status === "archived") {
+        setScreen("trophies");
+        setSelectedMomentReadOnly(true);
+        willPresentMoment = true;
+        setSelectedMoment(entry);
+
+        void getEntriesForQuest(quest.id)
+          .then((questEntries) => setArchivedQuestView(createArchivedQuestSummary(quest, questEntries)))
+          .catch((error) => console.error("Could not refresh the widget moment's archived quest", error));
+      } else {
+        setScreen("home");
+        setArchivedQuestView(null);
+        setSelectedQuest(quest);
+        setSelectedMomentReadOnly(false);
+        willPresentMoment = true;
+        setSelectedMoment(entry);
+
+        void (async () => {
+          await setLastOpenQuestId(quest.id);
+          await refreshData(quest.id);
+        })().catch((error) => console.error("Could not refresh the widget moment's active quest", error));
+      }
+    } finally {
+      setResolvingWidgetMoment(false);
+
+      if (!willPresentMoment) {
+        setWidgetLaunchCoverVisible(false);
+      }
     }
-
-    const quest = await getQuestById(entry.questId);
-
-    if (!quest) {
-      return;
-    }
-
-    setPhotoViewerUri(null);
-    setMomentMenuOpen(false);
-
-    if (quest.status === "archived") {
-      const questEntries = await getEntriesForQuest(quest.id);
-      setScreen("trophies");
-      setArchivedQuestView(createArchivedQuestSummary(quest, questEntries));
-      setSelectedMomentReadOnly(true);
-    } else {
-      await setLastOpenQuestId(quest.id);
-      await refreshData(quest.id);
-      setScreen("home");
-      setArchivedQuestView(null);
-      setSelectedMomentReadOnly(false);
-    }
-
-    setSelectedMoment(entry);
   }
 
   async function handleCreateQuest() {
@@ -571,6 +637,9 @@ export default function App() {
       }
 
       const previewImage = await resolvePreviewImageMetadata(photo.uri, photo.width, photo.height);
+      setPendingMomentDate(new Date());
+      setPendingMomentDateSource("today");
+      setPendingMomentDatePickerOpen(false);
       setPendingCapturePreview(previewImage);
     } catch (error) {
       console.error(error);
@@ -595,8 +664,15 @@ export default function App() {
         return;
       }
 
+      try {
+        await MediaLibrary.requestPermissionsAsync(false, ["photo"]);
+      } catch (error) {
+        console.warn("Could not request photo metadata access", error);
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         allowsEditing: false,
+        exif: true,
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 1,
         selectionLimit: 1,
@@ -607,7 +683,11 @@ export default function App() {
       }
 
       const asset = result.assets[0];
+      const suggestedDate = await getSuggestedPhotoDate(asset);
       const previewImage = await resolvePreviewImageMetadata(asset.uri, asset.width, asset.height);
+      setPendingMomentDate(suggestedDate ?? new Date());
+      setPendingMomentDateSource(suggestedDate ? "photo" : "today");
+      setPendingMomentDatePickerOpen(false);
       setPendingImportPreview(previewImage);
     } catch (error) {
       console.error(error);
@@ -661,8 +741,8 @@ export default function App() {
 
     try {
       setSavingPhoto(true);
-      await saveMoment(pendingCapturePreview.uri, "capture");
-      await finishMomentAdded();
+      const entryId = await saveMoment(pendingCapturePreview.uri, "capture");
+      await finishMomentAdded(entryId);
     } catch (error) {
       console.error(error);
       Alert.alert("Camera error", "That photo did not save. Try one more time.");
@@ -678,8 +758,8 @@ export default function App() {
 
     try {
       setSavingPhoto(true);
-      await saveMoment(pendingImportPreview.uri, "import");
-      await finishMomentAdded();
+      const entryId = await saveMoment(pendingImportPreview.uri, "import");
+      await finishMomentAdded(entryId);
     } catch (error) {
       console.error(error);
       Alert.alert("Upload error", "That photo did not save. Try one more time.");
@@ -690,10 +770,12 @@ export default function App() {
 
   function cancelPendingCapture() {
     setPendingCapturePreview(null);
+    resetPendingMomentDate();
   }
 
   function cancelPendingImport() {
     setPendingImportPreview(null);
+    resetPendingMomentDate();
   }
 
   function flipCamera() {
@@ -706,14 +788,20 @@ export default function App() {
 
   async function saveMoment(sourceUri: string, source: "capture" | "import") {
     if (!selectedQuest) {
-      return;
+      throw new Error("Choose a quest before saving a moment.");
     }
 
     let savedUri: string | null = null;
 
     try {
       savedUri = source === "capture" ? await saveCapturedPhoto(sourceUri) : await saveImportedPhoto(sourceUri);
-      await addEntry(selectedQuest.id, savedUri, entries.length === 0 ? 1 : 0, captionDraft);
+      return await addEntry(
+        selectedQuest.id,
+        savedUri,
+        pendingMomentDate.toISOString(),
+        entries.length === 0 ? 1 : 0,
+        captionDraft
+      );
     } catch (error) {
       if (savedUri) {
         await deleteStoredPhoto(savedUri);
@@ -723,21 +811,22 @@ export default function App() {
     }
   }
 
-  async function finishMomentAdded() {
+  async function finishMomentAdded(entryId: number) {
     setCameraOpen(false);
     setCaptionDraft("");
     setPendingCapturePreview(null);
     setPendingImportPreview(null);
+    resetPendingMomentDate();
     const questEntries = await refreshData();
-    const newestMoment = questEntries[0];
+    const createdMoment = questEntries.find((entry) => entry.id === entryId);
 
-    if (newestMoment) {
+    if (createdMoment) {
       setHighlightedMomentId(null);
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({ y: Math.max(scrapbookY - 12, 0), animated: true });
       }, 150);
       setTimeout(() => {
-        setHighlightedMomentId(newestMoment.id);
+        setHighlightedMomentId(createdMoment.id);
         setCelebrationKey((key) => key + 1);
       }, 650);
     }
@@ -792,6 +881,7 @@ export default function App() {
     setCaptionDraft("");
     setPendingCapturePreview(null);
     setPendingImportPreview(null);
+    resetPendingMomentDate();
     setReflectionPromptIndex((index) => (index + 1) % REFLECTION_PROMPTS.length);
     setCameraOpen(true);
   }
@@ -801,6 +891,26 @@ export default function App() {
     setCaptionDraft("");
     setPendingCapturePreview(null);
     setPendingImportPreview(null);
+    resetPendingMomentDate();
+  }
+
+  function resetPendingMomentDate() {
+    setPendingMomentDate(new Date());
+    setPendingMomentDateSource("today");
+    setPendingMomentDatePickerOpen(false);
+  }
+
+  function handlePendingMomentDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (Platform.OS === "android") {
+      setPendingMomentDatePickerOpen(false);
+    }
+
+    if (event.type === "dismissed" || !selectedDate) {
+      return;
+    }
+
+    setPendingMomentDate(combineCalendarDateWithTime(selectedDate, pendingMomentDate));
+    setPendingMomentDateSource("chosen");
   }
 
   async function openPrivacyPolicy() {
@@ -930,6 +1040,7 @@ export default function App() {
 
   function openMoment(moment: JournalEntry, isReadOnly = false) {
     setMomentMenuOpen(false);
+    setSelectedMomentOpenedFromWidget(false);
     setSelectedMomentReadOnly(isReadOnly);
     setSelectedMoment(moment);
   }
@@ -1259,6 +1370,69 @@ export default function App() {
     setMomentMenuOpen(false);
   }
 
+  function openEditMomentDate() {
+    if (!selectedMoment || selectedMomentReadOnly || savingMomentDate) {
+      return;
+    }
+
+    setMomentMenuOpen(false);
+    setEditMomentDateDraft(new Date(selectedMoment.timestamp));
+    setEditMomentDatePickerOpen(true);
+  }
+
+  function closeEditMomentDate() {
+    if (savingMomentDate) {
+      return;
+    }
+
+    setEditMomentDatePickerOpen(false);
+    setEditMomentDateDraft(null);
+  }
+
+  function handleEditMomentDateChange(event: DateTimePickerEvent, selectedDate?: Date) {
+    if (event.type === "dismissed" || !selectedDate || !editMomentDateDraft) {
+      if (Platform.OS === "android") {
+        closeEditMomentDate();
+      }
+      return;
+    }
+
+    const nextDate = combineCalendarDateWithTime(selectedDate, editMomentDateDraft);
+    setEditMomentDateDraft(nextDate);
+
+    if (Platform.OS === "android") {
+      setEditMomentDatePickerOpen(false);
+      void persistEditedMomentDate(nextDate);
+    }
+  }
+
+  async function persistEditedMomentDate(date = editMomentDateDraft) {
+    if (!selectedMoment || !date || savingMomentDate) {
+      return;
+    }
+
+    const momentId = selectedMoment.id;
+
+    try {
+      setSavingMomentDate(true);
+      await updateEntryTimestamp(momentId, date.toISOString());
+      const questEntries = await refreshData(selectedMoment.questId);
+      const updatedMoment = questEntries.find((entry) => entry.id === momentId);
+
+      if (updatedMoment) {
+        setSelectedMoment(updatedMoment);
+      }
+
+      setEditMomentDatePickerOpen(false);
+      setEditMomentDateDraft(null);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Date error", "That moment date could not be updated. Try one more time.");
+    } finally {
+      setSavingMomentDate(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingScreen}>
@@ -1269,9 +1443,18 @@ export default function App() {
     );
   }
 
+  if (resolvingWidgetMoment) {
+    return (
+      <View style={styles.loadingScreen}>
+        <StatusBar style="dark" />
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
+      {widgetLaunchCoverVisible || appSnapshotCoverVisible ? <View style={styles.widgetLaunchCover} /> : null}
       <Modal animationType="slide" visible={cameraOpen} onRequestClose={closeCamera}>
         <View style={styles.cameraScreen}>
           {!isPreviewingMoment ? (
@@ -1317,6 +1500,49 @@ export default function App() {
                     layout={previewCardLayout}
                     caption={DEFAULT_SCRAPBOOK_PREVIEW_CAPTION}
                   />
+                  <View style={styles.previewDateCard}>
+                    <Pressable
+                      onPress={() => setPendingMomentDatePickerOpen((isOpen) => !isOpen)}
+                      style={styles.previewDateRow}
+                      disabled={savingPhoto || importingPhoto}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Moment date ${formatDate(pendingMomentDate.toISOString())}. Change date`}
+                    >
+                      <View>
+                        <Text style={styles.previewDateLabel}>Date</Text>
+                        <Text style={styles.previewDateValue}>{formatDate(pendingMomentDate.toISOString())}</Text>
+                        <Text style={styles.previewDateSource}>
+                          {pendingMomentDateSource === "photo"
+                            ? "Suggested from photo"
+                            : pendingMomentDateSource === "chosen"
+                              ? "Chosen date"
+                              : "Today"}
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons name="calendar-edit" size={24} color={palette.accent} />
+                    </Pressable>
+                    {pendingMomentDatePickerOpen ? (
+                      <View style={styles.previewDatePickerWrap}>
+                        <DateTimePicker
+                          value={pendingMomentDate}
+                          mode="date"
+                          display={Platform.OS === "ios" ? "inline" : "default"}
+                          maximumDate={new Date()}
+                          onChange={handlePendingMomentDateChange}
+                        />
+                        {Platform.OS === "ios" ? (
+                          <Pressable
+                            onPress={() => setPendingMomentDatePickerOpen(false)}
+                            style={styles.previewDateDoneButton}
+                            accessibilityRole="button"
+                            accessibilityLabel="Done choosing moment date"
+                          >
+                            <Text style={styles.previewDateDoneText}>Done</Text>
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    ) : null}
+                  </View>
                   <View style={styles.previewCaptionCard}>
                     <TextInput
                       value={captionDraft}
@@ -1351,7 +1577,7 @@ export default function App() {
                     disabled={savingPhoto}
                     accessibilityLabel="Save moment"
                   >
-                    <Text style={styles.importPrimaryButtonText}>Save Moment</Text>
+                    <Text style={styles.importPrimaryButtonText}>Add to Journey</Text>
                   </Pressable>
                 </View>
                 <View
@@ -1436,8 +1662,13 @@ export default function App() {
       </Modal>
 
       <Modal
-        animationType="fade"
+        animationType={selectedMomentOpenedFromWidget ? "none" : "fade"}
         visible={!!selectedMoment}
+        onShow={() => {
+          if (selectedMomentOpenedFromWidget) {
+            setWidgetLaunchCoverVisible(false);
+          }
+        }}
         onRequestClose={() => {
           if (photoViewerUri) {
             closePhotoViewer();
@@ -1445,6 +1676,8 @@ export default function App() {
           }
 
           setMomentMenuOpen(false);
+          setEditMomentDatePickerOpen(false);
+          setEditMomentDateDraft(null);
           setSelectedMoment(null);
           setSelectedMomentReadOnly(false);
         }}
@@ -1466,6 +1699,8 @@ export default function App() {
               onPress={() => {
                 setPhotoViewerUri(null);
                 setMomentMenuOpen(false);
+                setEditMomentDatePickerOpen(false);
+                setEditMomentDateDraft(null);
                 setSelectedMoment(null);
                 setSelectedMomentReadOnly(false);
               }}
@@ -1498,6 +1733,11 @@ export default function App() {
           ) : null}
           {momentMenuOpen && !selectedMomentReadOnly ? (
             <View style={styles.momentMenu}>
+              <Pressable onPress={openEditMomentDate} style={styles.deleteTextButton}>
+                <MaterialCommunityIcons name="calendar-edit" size={19} color={palette.pencil} />
+                <Text style={styles.deleteTextButtonText}>Edit date</Text>
+              </Pressable>
+              <View style={styles.momentMenuDivider} />
               {selectedMoment?.caption?.trim() ? (
                 <Pressable onPress={handleDeleteSelectedMomentText} style={styles.deleteTextButton}>
                   <MaterialCommunityIcons name="text-box-remove-outline" size={19} color={palette.pencil} />
@@ -1514,6 +1754,57 @@ export default function App() {
                 <Text style={styles.deleteMomentText}>{deletingMoment ? "Deleting..." : "Delete moment"}</Text>
               </Pressable>
             </View>
+          ) : null}
+          {editMomentDatePickerOpen && editMomentDateDraft ? (
+            Platform.OS === "ios" ? (
+              <View style={styles.editDateBackdrop}>
+                <View style={styles.editDateCard}>
+                  <Text style={styles.modalTitle}>Choose Date</Text>
+                  <DateTimePicker
+                    value={editMomentDateDraft}
+                    mode="date"
+                    display="inline"
+                    maximumDate={new Date()}
+                    onChange={handleEditMomentDateChange}
+                  />
+                  <View style={styles.editDateTip} accessible accessibilityRole="text">
+                    <MaterialCommunityIcons name="information-outline" size={17} color={palette.pencil} />
+                    <Text style={styles.editDateTipText}>
+                      Future dates aren’t available. Moments can only be dated today or earlier.
+                    </Text>
+                  </View>
+                  <View style={styles.editDateActions}>
+                    <Pressable
+                      onPress={closeEditMomentDate}
+                      style={[styles.secondaryButton, styles.editDateActionButton]}
+                      disabled={savingMomentDate}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.secondaryButtonText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void persistEditedMomentDate()}
+                      style={[
+                        savingMomentDate ? styles.primaryButtonDisabled : styles.primaryButton,
+                        styles.editDateActionButton,
+                      ]}
+                      disabled={savingMomentDate}
+                      accessibilityRole="button"
+                    >
+                      <Text style={styles.primaryButtonText}>{savingMomentDate ? "Saving..." : "Done"}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <DateTimePicker
+                value={editMomentDateDraft}
+                mode="date"
+                display="default"
+                maximumDate={new Date()}
+                onChange={handleEditMomentDateChange}
+              />
+            )
           ) : null}
           {photoViewerUri ? (
             <Animated.View style={[styles.photoViewerScreen, { opacity: photoViewerBackdropOpacity }]}>
@@ -2777,6 +3068,102 @@ function addDays(date: Date, days: number) {
   return nextDate;
 }
 
+async function getSuggestedPhotoDate(asset: ImagePicker.ImagePickerAsset) {
+  const originalDate = parsePhotoMetadataDate(asset.exif?.DateTimeOriginal);
+
+  if (originalDate && isSelectableMomentDate(originalDate)) {
+    return originalDate;
+  }
+
+  if (asset.assetId) {
+    try {
+      const assetInfo = await MediaLibrary.getAssetInfoAsync(asset.assetId);
+      const libraryDate = parsePhotoMetadataDate(assetInfo.creationTime);
+
+      if (libraryDate && isSelectableMomentDate(libraryDate)) {
+        return libraryDate;
+      }
+    } catch (error) {
+      console.warn("Could not read the selected photo date", error);
+    }
+  }
+
+  const fallbackExifValues = [
+    asset.exif?.DateTimeDigitized,
+    asset.exif?.DateTime,
+    asset.exif?.CreationDate,
+  ];
+
+  for (const value of fallbackExifValues) {
+    const date = parsePhotoMetadataDate(value);
+
+    if (date && isSelectableMomentDate(date)) {
+      return date;
+    }
+  }
+
+  return null;
+}
+
+function parsePhotoMetadataDate(value: unknown) {
+  if (typeof value === "number") {
+    const numericDate = new Date(value);
+    return Number.isFinite(numericDate.getTime()) ? numericDate : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmedValue = value.trim();
+  const localExifMatch = trimmedValue.match(
+    /^(\d{4})[:/-](\d{2})[:/-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?$/
+  );
+
+  if (localExifMatch) {
+    const [, yearText, monthText, dayText, hourText, minuteText, secondText] = localExifMatch;
+    const parts = [yearText, monthText, dayText, hourText, minuteText, secondText].map(Number);
+    const [year, month, day, hour, minute, second] = parts;
+    const localDate = new Date(year, month - 1, day, hour, minute, second);
+
+    if (
+      localDate.getFullYear() === year &&
+      localDate.getMonth() === month - 1 &&
+      localDate.getDate() === day &&
+      localDate.getHours() === hour &&
+      localDate.getMinutes() === minute &&
+      localDate.getSeconds() === second
+    ) {
+      return localDate;
+    }
+
+    return null;
+  }
+
+  const parsedDate = new Date(trimmedValue);
+  return Number.isFinite(parsedDate.getTime()) ? parsedDate : null;
+}
+
+function isSelectableMomentDate(date: Date) {
+  if (!Number.isFinite(date.getTime())) {
+    return false;
+  }
+
+  return startOfDay(date).getTime() <= startOfDay(new Date()).getTime();
+}
+
+function combineCalendarDateWithTime(calendarDate: Date, timeSource: Date) {
+  return new Date(
+    calendarDate.getFullYear(),
+    calendarDate.getMonth(),
+    calendarDate.getDate(),
+    timeSource.getHours(),
+    timeSource.getMinutes(),
+    timeSource.getSeconds(),
+    timeSource.getMilliseconds()
+  );
+}
+
 function parseReminderTime(time: string) {
   const [hourText, minuteText] = time.split(":");
   const hour = Number(hourText);
@@ -2977,6 +3364,12 @@ const styles = StyleSheet.create({
     color: palette.ink,
     fontSize: 16,
     fontWeight: "600",
+  },
+  widgetLaunchCover: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+    backgroundColor: palette.paper,
   },
   heroCard: {
     paddingHorizontal: 2,
@@ -4280,6 +4673,59 @@ const styles = StyleSheet.create({
     opacity: 0.86,
     textAlign: "center",
   },
+  previewDateCard: {
+    width: "100%",
+    backgroundColor: "rgba(255, 254, 249, 0.9)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.16)",
+    overflow: "hidden",
+  },
+  previewDateRow: {
+    minHeight: 76,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  previewDateLabel: {
+    color: palette.pencil,
+    fontSize: 12,
+    fontWeight: "900",
+    textTransform: "uppercase",
+    letterSpacing: 0.7,
+  },
+  previewDateValue: {
+    color: palette.ink,
+    fontSize: 17,
+    lineHeight: 23,
+    fontWeight: "900",
+  },
+  previewDateSource: {
+    color: palette.muted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: "700",
+  },
+  previewDatePickerWrap: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(124, 58, 237, 0.1)",
+    paddingHorizontal: 8,
+    paddingBottom: 10,
+  },
+  previewDateDoneButton: {
+    alignSelf: "flex-end",
+    minHeight: 40,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+  },
+  previewDateDoneText: {
+    color: palette.accent,
+    fontSize: 15,
+    fontWeight: "900",
+  },
   previewCaptionCard: {
     width: "100%",
     minHeight: 112,
@@ -4697,6 +5143,52 @@ const styles = StyleSheet.create({
     height: 1,
     marginHorizontal: 12,
     backgroundColor: "rgba(124, 58, 237, 0.1)",
+  },
+  editDateBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 12,
+    backgroundColor: "rgba(40, 33, 48, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  editDateCard: {
+    width: "100%",
+    maxWidth: 390,
+    backgroundColor: palette.photoPaper,
+    borderRadius: 14,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(124, 58, 237, 0.16)",
+    shadowColor: palette.shadowStrong,
+    shadowOpacity: 0.28,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+  },
+  editDateActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+  },
+  editDateTip: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 7,
+    marginTop: 2,
+    paddingHorizontal: 4,
+  },
+  editDateTipText: {
+    flex: 1,
+    color: palette.pencil,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+  },
+  editDateActionButton: {
+    flex: 1,
+    minHeight: 52,
+    paddingHorizontal: 16,
+    justifyContent: "center",
   },
   deleteMomentButton: {
     minHeight: 44,
