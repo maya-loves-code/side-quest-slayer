@@ -1,3 +1,5 @@
+import "react-native-gesture-handler";
+
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import type { DateTimePickerEvent } from "@react-native-community/datetimepicker";
@@ -7,6 +9,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import { StatusBar } from "expo-status-bar";
 import { type ComponentProps, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   ActivityIndicator,
   Alert,
@@ -243,6 +246,8 @@ function getPreviewCardLayout(
 
 export default function App() {
   const cameraRef = useRef<CameraView | null>(null);
+  const cameraZoomRef = useRef(0);
+  const pinchStartZoomRef = useRef(0);
   const scrollViewRef = useRef<ScrollView | null>(null);
   const importPreviewScrollRef = useRef<ScrollView | null>(null);
   const databaseReadyRef = useRef(false);
@@ -262,6 +267,7 @@ export default function App() {
   const [newQuestFormOpen, setNewQuestFormOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [cameraFacing, setCameraFacing] = useState<CameraType>("back");
+  const [cameraZoom, setCameraZoom] = useState(0);
   const [captionDraft, setCaptionDraft] = useState("");
   const [reflectionPromptIndex, setReflectionPromptIndex] = useState(0);
   const [pendingCapturePreview, setPendingCapturePreview] = useState<PreviewImageMetadata | null>(null);
@@ -344,6 +350,25 @@ export default function App() {
   const isQuestOnboardingVisible = screen === "home" && !selectedQuest;
   const isActiveQuestScreenVisible = screen === "home" && Boolean(selectedQuest);
   const clearCelebration = useCallback(() => setHighlightedMomentId(null), []);
+  const updateCameraZoom = useCallback((nextZoom: number) => {
+    const clampedZoom = clamp(nextZoom, 0, 1);
+    cameraZoomRef.current = clampedZoom;
+    setCameraZoom(clampedZoom);
+  }, []);
+  const cameraPinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .enabled(!isPreviewingMoment && !savingPhoto && !importingPhoto)
+        .runOnJS(true)
+        .onStart(() => {
+          pinchStartZoomRef.current = cameraZoomRef.current;
+        })
+        .onUpdate(({ scale }) => {
+          const zoomDelta = Math.log2(Math.max(scale, 0.01)) * 0.5;
+          updateCameraZoom(pinchStartZoomRef.current + zoomDelta);
+        }),
+    [importingPhoto, isPreviewingMoment, savingPhoto, updateCameraZoom]
+  );
 
   useEffect(() => {
     void bootstrapApp();
@@ -783,6 +808,7 @@ export default function App() {
       return;
     }
 
+    updateCameraZoom(0);
     setCameraFacing((facing) => (facing === "back" ? "front" : "back"));
   }
 
@@ -878,6 +904,7 @@ export default function App() {
     }
 
     setCameraFacing("back");
+    updateCameraZoom(0);
     setCaptionDraft("");
     setPendingCapturePreview(null);
     setPendingImportPreview(null);
@@ -1456,9 +1483,16 @@ export default function App() {
       <StatusBar style="dark" />
       {widgetLaunchCoverVisible || appSnapshotCoverVisible ? <View style={styles.widgetLaunchCover} /> : null}
       <Modal animationType="slide" visible={cameraOpen} onRequestClose={closeCamera}>
-        <View style={styles.cameraScreen}>
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <GestureDetector gesture={cameraPinchGesture}>
+            <View style={styles.cameraScreen}>
           {!isPreviewingMoment ? (
-            <CameraView ref={cameraRef} facing={cameraFacing} style={StyleSheet.absoluteFill} />
+            <CameraView
+              ref={cameraRef}
+              facing={cameraFacing}
+              zoom={cameraZoom}
+              style={StyleSheet.absoluteFill}
+            />
           ) : null}
           {isPreviewingMoment ? (
             <>
@@ -1643,7 +1677,9 @@ export default function App() {
               </View>
             )}
           </KeyboardAvoidingView>
-        </View>
+            </View>
+          </GestureDetector>
+        </GestureHandlerRootView>
       </Modal>
 
       <Modal animationType="fade" transparent visible={emojiPickerOpen}>
@@ -1981,7 +2017,7 @@ export default function App() {
                     </Text>
                   </View>
                 </View>
-                <DailyInspirationText message={dailyInspiration.message} />
+                <Text style={styles.questIdentityNote}>{dailyInspiration.message}</Text>
               </View>
 
               <Pressable onPress={openCamera} style={styles.logStepCard} accessibilityLabel="Open camera">
@@ -2752,26 +2788,6 @@ function getWidgetMomentId(url: string) {
   return Number.isInteger(entryId) && entryId > 0 ? entryId : null;
 }
 
-function DailyInspirationText({ message }: { message: string }) {
-  const fadeProgress = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    fadeProgress.setValue(0);
-    Animated.timing(fadeProgress, {
-      toValue: 1,
-      duration: 420,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [fadeProgress, message]);
-
-  return (
-    <Animated.Text style={[styles.questIdentityNote, { opacity: fadeProgress }]}>
-      {message}
-    </Animated.Text>
-  );
-}
-
 function MomentTile({
   item,
   index,
@@ -3304,6 +3320,9 @@ function splitFirstSentence(text: string) {
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
     backgroundColor: palette.paper,
