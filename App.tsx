@@ -344,6 +344,11 @@ export default function App() {
   const dailyReminderTimeLabel = useMemo(() => formatReminderTime(displayedReminderTime), [displayedReminderTime]);
   const dailyReminderPickerValue = useMemo(() => createReminderDate(displayedReminderTime), [displayedReminderTime]);
   const dailyInspiration = useMemo(() => getDailyInspiration(), [dailyInspirationDateKey]);
+  const activeJourneyShowsYear = shouldJourneyPairShowYear(journeyPair.first, journeyPair.latest);
+  const archivedJourneyShowsYear = shouldJourneyPairShowYear(
+    archivedQuestView?.firstEntry ?? null,
+    archivedQuestView?.latestEntry ?? null
+  );
   const localDataOperationInProgress = deletingAllData || generatingDemoData;
   const isQuestOnboardingVisible = screen === "home" && !selectedQuest;
   const isActiveQuestScreenVisible = screen === "home" && Boolean(selectedQuest);
@@ -2073,8 +2078,18 @@ export default function App() {
               <View style={styles.journeyCard}>
                 <ScrapbookHeader title="From Then to Now" note="Look how far you have come." />
                 <View style={styles.bridgeRow}>
-                  <JourneyPanel label="Day 1" entry={journeyPair.first} onPress={openMoment} />
-                  <JourneyPanel label="Latest" entry={journeyPair.latest} onPress={openMoment} />
+                  <JourneyPanel
+                    label="Day 1"
+                    entry={journeyPair.first}
+                    includeYear={activeJourneyShowsYear}
+                    onPress={openMoment}
+                  />
+                  <JourneyPanel
+                    label="Latest"
+                    entry={journeyPair.latest}
+                    includeYear={activeJourneyShowsYear}
+                    onPress={openMoment}
+                  />
                 </View>
               </View>
 
@@ -2130,8 +2145,18 @@ export default function App() {
               <View style={styles.journeyCard}>
                 <Text style={styles.sectionTitle}>From Then to Now</Text>
                 <View style={styles.bridgeRow}>
-                  <JourneyPanel label="First Step" entry={archivedQuestView.firstEntry} onPress={(entry) => openMoment(entry, true)} />
-                  <JourneyPanel label="Latest Step" entry={archivedQuestView.latestEntry} onPress={(entry) => openMoment(entry, true)} />
+                  <JourneyPanel
+                    label="First Step"
+                    entry={archivedQuestView.firstEntry}
+                    includeYear={archivedJourneyShowsYear}
+                    onPress={(entry) => openMoment(entry, true)}
+                  />
+                  <JourneyPanel
+                    label="Latest Step"
+                    entry={archivedQuestView.latestEntry}
+                    includeYear={archivedJourneyShowsYear}
+                    onPress={(entry) => openMoment(entry, true)}
+                  />
                 </View>
               </View>
             ) : null}
@@ -2530,10 +2555,12 @@ function AddTodayTile({ tileWidth, onPress }: { tileWidth: number; onPress: () =
 function JourneyPanel({
   label,
   entry,
+  includeYear,
   onPress,
 }: {
   label: string;
   entry: JournalEntry | null;
+  includeYear: boolean;
   onPress: (entry: JournalEntry) => void;
 }) {
   const placeholderText = label.toLowerCase().includes("latest")
@@ -2547,10 +2574,10 @@ function JourneyPanel({
         <Pressable
           onPress={() => onPress(entry)}
           style={styles.bridgeImageWrap}
-          accessibilityLabel={`Open ${label.toLowerCase()} moment`}
+          accessibilityLabel={`Open ${label.toLowerCase()} moment from ${formatDate(entry.timestamp)}`}
         >
           <Image source={{ uri: entry.imageUri }} style={styles.bridgeImage} />
-          <Text style={styles.dateTag}>{formatShortDate(entry.timestamp)}</Text>
+          <Text style={styles.dateTag}>{formatJourneyDate(entry.timestamp, includeYear)}</Text>
         </Pressable>
       ) : (
         <View style={styles.bridgePlaceholder}>
@@ -3282,6 +3309,20 @@ function formatShortDate(dateString: string) {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatJourneyDate(dateString: string, includeYear: boolean) {
+  return new Date(dateString).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    ...(includeYear ? { year: "numeric" as const } : {}),
+  });
+}
+
+function shouldJourneyPairShowYear(first: JournalEntry | null, latest: JournalEntry | null) {
+  const currentYear = new Date().getFullYear();
+
+  return [first, latest].some((entry) => entry && new Date(entry.timestamp).getFullYear() !== currentYear);
 }
 
 function formatTimestamp(dateString: string | null) {
