@@ -3,7 +3,7 @@ import * as SQLite from "expo-sqlite";
 import { createStoredPhotoReference, resolveStoredPhotoUri } from "./storage";
 import type { JournalEntry, Quest } from "../types";
 
-const ENTRY_CAPTION_CHARACTER_LIMIT = 180;
+const ENTRY_CAPTION_CHARACTER_LIMIT = 280;
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const LAST_OPEN_QUEST_SETTING_KEY = "last_open_quest_id";
 const DAILY_REMINDER_ENABLED_SETTING_KEY = "daily_reminder_enabled";
