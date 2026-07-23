@@ -119,7 +119,7 @@ type PreviewPhotoCardLayout = {
 
 const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
-const CAPTION_CHARACTER_LIMIT = 180;
+const CAPTION_CHARACTER_LIMIT = 280;
 const FOOTER_ICON_SIZE = 24;
 const PRIVACY_POLICY_URL = "https://maya-loves-code.github.io/side-quest-slayer/privacy-policy.html";
 const WIDGET_MOMENT_URL_PATTERN = /^sidequestslayer:\/\/moment\/(\d+)(?:[/?#]|$)/i;
