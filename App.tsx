@@ -117,7 +117,7 @@ type PreviewPhotoCardLayout = {
   photoHeight: number;
 };
 
-const EMOJI_OPTIONS = ["⚔️", "🎨", "💃", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "🏃‍♀️"];
+const EMOJI_OPTIONS = ["⚔️", "🎨", "🪩", "💪", "🎓", "💻", "🎵", "✍️", "📷", "🌱", "🧵", "🛠️", "🎭", "🧠", "👟"];
 const QUEST_TITLE_CHARACTER_LIMIT = 80;
 const CAPTION_CHARACTER_LIMIT = 280;
 const FOOTER_ICON_SIZE = 24;
@@ -3243,7 +3243,7 @@ function getQuestEmoji(title: string) {
   }
 
   if (/\b(dance|dancer|ballet|choreo)\b/.test(normalizedTitle)) {
-    return "💃";
+    return "🪩";
   }
 
   if (/\b(act|acting|actor|actress|theater|theatre|drama|audition|monologue)\b/.test(normalizedTitle)) {
@@ -3251,7 +3251,7 @@ function getQuestEmoji(title: string) {
   }
 
   if (/\b(run|runner|running|marathon|race|jog|jogging)\b/.test(normalizedTitle)) {
-    return "🏃‍♀️";
+    return "👟";
   }
 
   if (/\b(gym|fitness|workout|lift|strength)\b/.test(normalizedTitle)) {
