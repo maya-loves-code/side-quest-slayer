@@ -3,7 +3,7 @@
     "name": "Side Quest Slayer",
     "slug": "side-quest-slayer",
     "scheme": "sidequestslayer",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -42,7 +42,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sidequestslayer.app",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "entitlements": {
         "com.apple.security.application-groups": [
           "group.com.sidequestslayer.app"
